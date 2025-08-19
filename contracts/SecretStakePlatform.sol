@@ -8,6 +8,7 @@ import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol
 import {IERC20} from "@openzeppelin/contracts/interfaces/IERC20.sol";
 import {cUSDT} from "./cUSDT.sol";
 import {CSecretStakeCoin} from "./cSecretStakeCoin.sol";
+import "hardhat/console.sol";
 
 contract SecretStakePlatform is SepoliaConfig, Ownable, ReentrancyGuard {
     using FHE for euint64;
@@ -26,9 +27,9 @@ contract SecretStakePlatform is SepoliaConfig, Ownable, ReentrancyGuard {
 
     // User staking info
     struct UserInfo {
-        euint64 stakedAmount;     // Encrypted staked amount
-        euint64 rewardDebt;       // Encrypted reward debt for reward calculation
-        uint256 lastStakeBlock;   // Block number of last stake action
+        euint64 stakedAmount; // Encrypted staked amount
+        euint64 rewardDebt; // Encrypted reward debt for reward calculation
+        uint256 lastStakeBlock; // Block number of last stake action
     }
 
     mapping(address => UserInfo) public userInfo;
@@ -52,15 +53,11 @@ contract SecretStakePlatform is SepoliaConfig, Ownable, ReentrancyGuard {
     euint64 internal INSUFFICIENT_BALANCE;
     euint64 internal INVALID_AMOUNT;
 
-    constructor(
-        address _underlyingUSDT,
-        address _stakingToken,
-        address _rewardToken
-    ) Ownable(msg.sender) {
+    constructor(address _underlyingUSDT, address _stakingToken, address _rewardToken) Ownable(msg.sender) {
         underlyingUSDT = IERC20(_underlyingUSDT);
         stakingToken = cUSDT(_stakingToken);
         rewardToken = CSecretStakeCoin(_rewardToken);
-        
+
         lastRewardBlock = block.number;
         totalStaked = euint64.wrap(bytes32(0));
         accRewardPerShare = euint64.wrap(bytes32(0));
@@ -84,16 +81,16 @@ contract SecretStakePlatform is SepoliaConfig, Ownable, ReentrancyGuard {
         // Always calculate rewards - FHE operations will handle zero cases automatically
         uint256 blocksPassed = block.number - lastRewardBlock;
         uint256 totalRewards = blocksPassed * REWARD_PER_BLOCK;
-        
+
         // Only calculate if total rewards > 0
         if (totalRewards > 0) {
             // Since FHE.div only supports plaintext divisors, we'll use a simplified approach
             // We'll distribute rewards proportionally but avoid encrypted division
             // For now, we'll add a fixed amount per staker per block
             euint64 rewardPerShareIncrease = euint64.wrap(bytes32(totalRewards * 1e12));
-            
+
             accRewardPerShare = FHE.add(accRewardPerShare, rewardPerShareIncrease);
-            
+
             // Mint rewards to this contract for distribution
             rewardToken.mintPlain(address(this), totalRewards);
         }
@@ -103,25 +100,22 @@ contract SecretStakePlatform is SepoliaConfig, Ownable, ReentrancyGuard {
     }
 
     // Stake cUSDT tokens
-    function stake(
-        externalEuint64 _encryptedAmount,
-        bytes calldata _inputProof
-    ) external nonReentrant {
+    function stake(externalEuint64 _encryptedAmount, bytes calldata _inputProof) external nonReentrant {
         updatePool();
 
         // Validate and convert external input
         euint64 amount = FHE.fromExternal(_encryptedAmount, _inputProof);
-        
+
         // Check if amount is valid (> 0)
         ebool isValidAmount = FHE.gt(amount, 0);
-        
+
         // Get user's current balance
         euint64 userBalance = stakingToken.confidentialBalanceOf(msg.sender);
         ebool hasSufficientBalance = FHE.ge(userBalance, amount);
-        
+
         // Combine all conditions
         ebool canStake = FHE.and(isValidAmount, hasSufficientBalance);
-        
+
         // Set error based on conditions
         euint64 errorCode = FHE.select(
             canStake,
@@ -132,7 +126,7 @@ contract SecretStakePlatform is SepoliaConfig, Ownable, ReentrancyGuard {
 
         // Get user info
         UserInfo storage user = userInfo[msg.sender];
-        
+
         // Calculate pending rewards before updating user info
         // Since FHE.div only supports plaintext divisors, use simplified calculation
         euint64 userRewardShare = FHE.mul(user.stakedAmount, accRewardPerShare);
@@ -153,14 +147,14 @@ contract SecretStakePlatform is SepoliaConfig, Ownable, ReentrancyGuard {
 
         // Update user staked amount
         user.stakedAmount = FHE.add(user.stakedAmount, transferAmount);
-        
+
         // Update total staked
         totalStaked = FHE.add(totalStaked, transferAmount);
-        
+
         // Update reward debt
         user.rewardDebt = FHE.mul(user.stakedAmount, accRewardPerShare);
         user.lastStakeBlock = block.number;
-        
+
         // Increment stake count
         userStakeCount[msg.sender]++;
 
@@ -181,17 +175,14 @@ contract SecretStakePlatform is SepoliaConfig, Ownable, ReentrancyGuard {
     }
 
     // Withdraw staked tokens
-    function withdraw(
-        externalEuint64 _encryptedAmount,
-        bytes calldata _inputProof
-    ) external nonReentrant {
+    function withdraw(externalEuint64 _encryptedAmount, bytes calldata _inputProof) external nonReentrant {
         updatePool();
 
         // Validate and convert external input
         euint64 amount = FHE.fromExternal(_encryptedAmount, _inputProof);
-        
+
         UserInfo storage user = userInfo[msg.sender];
-        
+
         // Check if amount is valid and user has sufficient staked amount
         ebool isValidAmount = FHE.gt(amount, 0);
         ebool hasSufficientStake = FHE.ge(user.stakedAmount, amount);
@@ -219,13 +210,13 @@ contract SecretStakePlatform is SepoliaConfig, Ownable, ReentrancyGuard {
 
         // Conditional withdrawal
         euint64 withdrawAmount = FHE.select(canWithdraw, amount, euint64.wrap(bytes32(0)));
-        
+
         // Update user staked amount
         user.stakedAmount = FHE.sub(user.stakedAmount, withdrawAmount);
-        
+
         // Update total staked
         totalStaked = FHE.sub(totalStaked, withdrawAmount);
-        
+
         // Update reward debt
         user.rewardDebt = FHE.mul(user.stakedAmount, accRewardPerShare);
 
@@ -253,7 +244,7 @@ contract SecretStakePlatform is SepoliaConfig, Ownable, ReentrancyGuard {
         updatePool();
 
         UserInfo storage user = userInfo[msg.sender];
-        
+
         // Calculate pending rewards
         euint64 userRewardShare = FHE.mul(user.stakedAmount, accRewardPerShare);
         euint64 pending = FHE.select(
@@ -302,15 +293,15 @@ contract SecretStakePlatform is SepoliaConfig, Ownable, ReentrancyGuard {
     // Note: This function needs to be non-view because FHE operations may modify state
     function pendingRewards(address _user) external returns (euint64) {
         UserInfo memory user = userInfo[_user];
-        
+
         // Always calculate pending rewards, let FHE handle zero cases
         euint64 currentAccRewardPerShare = accRewardPerShare;
-        
+
         // Calculate what the accRewardPerShare would be if we updated now
         if (block.number > lastRewardBlock) {
             uint256 blocksPassed = block.number - lastRewardBlock;
             uint256 totalRewards = blocksPassed * REWARD_PER_BLOCK;
-            
+
             if (totalRewards > 0) {
                 // Since FHE.div only supports plaintext divisors, use simplified approach
                 euint64 rewardPerShareIncrease = euint64.wrap(bytes32(totalRewards * 1e12));
@@ -319,15 +310,16 @@ contract SecretStakePlatform is SepoliaConfig, Ownable, ReentrancyGuard {
         }
 
         euint64 userRewardShare = FHE.mul(user.stakedAmount, currentAccRewardPerShare);
-        return FHE.select(
-            FHE.gt(user.stakedAmount, 0),
+        return
             FHE.select(
-                FHE.ge(userRewardShare, user.rewardDebt),
-                FHE.sub(userRewardShare, user.rewardDebt),
+                FHE.gt(user.stakedAmount, 0),
+                FHE.select(
+                    FHE.ge(userRewardShare, user.rewardDebt),
+                    FHE.sub(userRewardShare, user.rewardDebt),
+                    euint64.wrap(bytes32(0))
+                ),
                 euint64.wrap(bytes32(0))
-            ),
-            euint64.wrap(bytes32(0))
-        );
+            );
     }
 
     // Error handling functions
