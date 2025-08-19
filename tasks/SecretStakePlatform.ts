@@ -16,10 +16,11 @@ import type { TaskArguments } from "hardhat/types";
  *   npx hardhat --network localhost deploy
  *
  * 3. Interact with the SecretStakePlatform contract
- *   npx hardhat --network localhost task:stake --amount 1000000000000000000
+ *   npx hardhat --network localhost task:wrap-usdt --amount 2000
+ *   npx hardhat --network localhost task:stake --amount 1000
  *   npx hardhat --network localhost task:get-staked-amount
  *   npx hardhat --network localhost task:claim-rewards
- *   npx hardhat --network localhost task:withdraw --amount 500000000000000000
+ *   npx hardhat --network localhost task:withdraw --amount 500
  *
  * Tutorial: Deploy and Interact on Sepolia (--network sepolia)
  * ===========================================================
@@ -28,10 +29,11 @@ import type { TaskArguments } from "hardhat/types";
  *   npx hardhat --network sepolia deploy
  *
  * 2. Interact with the SecretStakePlatform contract
- *   npx hardhat --network sepolia task:stake --amount 1000000000000000000
+ *   npx hardhat --network sepolia task:wrap-usdt --amount 2000
+ *   npx hardhat --network sepolia task:stake --amount 1000
  *   npx hardhat --network sepolia task:get-staked-amount
  *   npx hardhat --network sepolia task:claim-rewards
- *   npx hardhat --network sepolia task:withdraw --amount 500000000000000000
+ *   npx hardhat --network sepolia task:withdraw --amount 500
  */
 
 /**
@@ -167,19 +169,21 @@ task("task:get-total-staked", "Gets the total staked amount")
 
 /**
  * Example:
- *   - npx hardhat --network localhost task:stake --amount 1000000000000000000
- *   - npx hardhat --network sepolia task:stake --amount 1000000000000000000
+ *   - npx hardhat --network localhost task:stake --amount 1000
+ *   - npx hardhat --network sepolia task:stake --amount 1000
  */
 task("task:stake", "Stakes cUSDT tokens to the platform")
   .addOptionalParam("address", "Optionally specify the SecretStakePlatform contract address")
-  .addParam("amount", "The amount to stake (in wei)")
+  .addParam("amount", "The amount to stake (in standard units, will be converted to wei internally)")
   .setAction(async function (taskArguments: TaskArguments, hre) {
     const { ethers, deployments, fhevm } = hre;
 
-    const amount = BigInt(taskArguments.amount);
-    if (amount <= 0n) {
+    const inputAmount = BigInt(taskArguments.amount);
+    if (inputAmount <= 0n) {
       throw new Error(`Amount must be greater than 0`);
     }
+    
+    const amount = inputAmount * BigInt(10 ** 6); // Convert to wei
 
     await fhevm.initializeCLIApi();
 
@@ -206,24 +210,26 @@ task("task:stake", "Stakes cUSDT tokens to the platform")
     const receipt = await tx.wait();
     console.log(`tx:${tx.hash} status=${receipt?.status}`);
 
-    console.log(`Stake of ${amount.toString()} succeeded!`);
+    console.log(`Stake of ${inputAmount.toString()} tokens (${amount.toString()} wei) succeeded!`);
   });
 
 /**
  * Example:
- *   - npx hardhat --network localhost task:withdraw --amount 500000000000000000
- *   - npx hardhat --network sepolia task:withdraw --amount 500000000000000000
+ *   - npx hardhat --network localhost task:withdraw --amount 500
+ *   - npx hardhat --network sepolia task:withdraw --amount 500
  */
 task("task:withdraw", "Withdraws staked tokens from the platform")
   .addOptionalParam("address", "Optionally specify the SecretStakePlatform contract address")
-  .addParam("amount", "The amount to withdraw (in wei)")
+  .addParam("amount", "The amount to withdraw (in standard units, will be converted to wei internally)")
   .setAction(async function (taskArguments: TaskArguments, hre) {
     const { ethers, deployments, fhevm } = hre;
 
-    const amount = BigInt(taskArguments.amount);
-    if (amount <= 0n) {
+    const inputAmount = BigInt(taskArguments.amount);
+    if (inputAmount <= 0n) {
       throw new Error(`Amount must be greater than 0`);
     }
+    
+    const amount = inputAmount * BigInt(10 ** 18); // Convert to wei
 
     await fhevm.initializeCLIApi();
 
@@ -250,7 +256,7 @@ task("task:withdraw", "Withdraws staked tokens from the platform")
     const receipt = await tx.wait();
     console.log(`tx:${tx.hash} status=${receipt?.status}`);
 
-    console.log(`Withdraw of ${amount.toString()} succeeded!`);
+    console.log(`Withdraw of ${inputAmount.toString()} tokens (${amount.toString()} wei) succeeded!`);
   });
 
 /**
@@ -482,4 +488,120 @@ task("task:platform-info", "Gets comprehensive platform information")
     console.log(`Underlying USDT: ${underlyingUSDTAddress}`);
 
     console.log(`==========================\n`);
+  });
+
+/**
+ * Example:
+ *   - npx hardhat --network localhost task:wrap-usdt --amount 2000
+ *   - npx hardhat --network sepolia task:wrap-usdt --amount 2000
+ */
+task("task:wrap-usdt", "Wraps USDT tokens to get cUSDT tokens")
+  .addParam("amount", "The amount of USDT to wrap (in standard units, will be converted to wei internally)")
+  .setAction(async function (taskArguments: TaskArguments, hre) {
+    const { ethers, deployments } = hre;
+
+    const inputAmount = BigInt(taskArguments.amount);
+    if (inputAmount <= 0n) {
+      throw new Error(`Amount must be greater than 0`);
+    }
+    
+    const amount = inputAmount * BigInt(10 ** 6); // USDT uses 6 decimals
+
+    const signers = await ethers.getSigners();
+    const signer = signers[0];
+
+    // Get contract addresses
+    const SecretStakePlatformDeployment = await deployments.get("SecretStakePlatform");
+    const platformContract = await ethers.getContractAt("SecretStakePlatform", SecretStakePlatformDeployment.address);
+    
+    const stakingTokenAddress = await platformContract.stakingToken();
+    const underlyingUSDTAddress = await platformContract.underlyingUSDT();
+    
+    console.log(`cUSDT Token: ${stakingTokenAddress}`);
+    console.log(`Underlying USDT: ${underlyingUSDTAddress}`);
+
+    const usdtContract = await ethers.getContractAt("MockUSDT", underlyingUSDTAddress);
+    const cUSDTContract = await ethers.getContractAt("cUSDT", stakingTokenAddress) as any;
+
+    // Check USDT balance
+    const usdtBalance = await usdtContract.balanceOf(signer.address);
+    console.log(`USDT Balance: ${usdtBalance.toString()}`);
+    
+    if (usdtBalance < amount) {
+      throw new Error(`Insufficient USDT balance. Have ${usdtBalance.toString()}, need ${amount.toString()}`);
+    }
+
+    // Step 1: Approve USDT to cUSDT contract
+    console.log(`Approving ${amount.toString()} USDT to cUSDT contract...`);
+    const approveTx = await usdtContract.connect(signer).approve(stakingTokenAddress, amount);
+    console.log(`Wait for approve tx:${approveTx.hash}...`);
+    await approveTx.wait();
+    console.log(`Approve tx:${approveTx.hash} completed`);
+
+    // Step 2: Wrap USDT to get cUSDT
+    console.log(`Wrapping ${amount.toString()} USDT to cUSDT...`);
+    const wrapTx = await cUSDTContract.connect(signer).wrap(signer.address, amount);
+    console.log(`Wait for wrap tx:${wrapTx.hash}...`);
+    
+    const receipt = await wrapTx.wait();
+    console.log(`Wrap tx:${wrapTx.hash} status=${receipt?.status}`);
+
+    console.log(`Wrap of ${inputAmount.toString()} USDT (${amount.toString()} units) succeeded!`);
+    console.log(`You now have cUSDT tokens that can be used for staking.`);
+  });
+
+/**
+ * Example:
+ *   - npx hardhat --network localhost task:unwrap-usdt --amount 1000
+ *   - npx hardhat --network sepolia task:unwrap-usdt --amount 1000
+ */
+task("task:unwrap-usdt", "Unwraps cUSDT tokens to get back USDT tokens")
+  .addParam("amount", "The amount of cUSDT to unwrap (in standard units, will be converted to wei internally)")
+  .setAction(async function (taskArguments: TaskArguments, hre) {
+    const { ethers, deployments, fhevm } = hre;
+
+    const inputAmount = BigInt(taskArguments.amount);
+    if (inputAmount <= 0n) {
+      throw new Error(`Amount must be greater than 0`);
+    }
+    
+    const amount = inputAmount * BigInt(10 ** 6); // USDT uses 6 decimals
+
+    await fhevm.initializeCLIApi();
+
+    const signers = await ethers.getSigners();
+    const signer = signers[0];
+
+    // Get contract addresses
+    const SecretStakePlatformDeployment = await deployments.get("SecretStakePlatform");
+    const platformContract = await ethers.getContractAt("SecretStakePlatform", SecretStakePlatformDeployment.address);
+    
+    const stakingTokenAddress = await platformContract.stakingToken();
+    const underlyingUSDTAddress = await platformContract.underlyingUSDT();
+    
+    console.log(`cUSDT Token: ${stakingTokenAddress}`);
+    console.log(`Underlying USDT: ${underlyingUSDTAddress}`);
+
+    const cUSDTContract = await ethers.getContractAt("cUSDT", stakingTokenAddress) as any;
+
+    // Encrypt the amount
+    const encryptedAmount = await fhevm
+      .createEncryptedInput(stakingTokenAddress, signer.address)
+      .add64(amount)
+      .encrypt();
+
+    console.log(`Unwrapping ${amount.toString()} cUSDT to USDT...`);
+    const unwrapTx = await cUSDTContract.connect(signer)["unwrap(address,address,bytes32,bytes)"](
+      signer.address, 
+      signer.address, 
+      encryptedAmount.handles[0], 
+      encryptedAmount.inputProof
+    );
+    console.log(`Wait for unwrap tx:${unwrapTx.hash}...`);
+    
+    const receipt = await unwrapTx.wait();
+    console.log(`Unwrap tx:${unwrapTx.hash} status=${receipt?.status}`);
+
+    console.log(`Unwrap of ${inputAmount.toString()} cUSDT (${amount.toString()} units) succeeded!`);
+    console.log(`You now have USDT tokens back.`);
   });

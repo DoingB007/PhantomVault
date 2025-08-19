@@ -8,12 +8,12 @@ import {FHE, euint64, externalEuint64} from "@fhevm/solidity/lib/FHE.sol";
 
 contract CSecretStakeCoin is ConfidentialFungibleToken, Ownable, SepoliaConfig {
     constructor() ConfidentialFungibleToken("cSecretStakeCoin", "cSSC", "") Ownable(msg.sender) {}
-    
+
     function mint(address to, externalEuint64 encryptedAmount, bytes calldata inputProof) external onlyOwner {
         euint64 amount = FHE.fromExternal(encryptedAmount, inputProof);
         _mint(to, amount);
     }
-    
+
     // Overload for internal use with plain amounts
     function mintPlain(address to, uint256 amount) external onlyOwner {
         euint64 encryptedAmount = euint64.wrap(bytes32(amount));

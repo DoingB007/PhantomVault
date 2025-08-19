@@ -51,7 +51,10 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const stakeContract = await hre.ethers.getContractAt("SecretStakePlatform", secretStakePlatform.address);
 
   // Transfer ownership of reward token to staking platform
-  console.log("Transferring CSecretStakeCoin ownership to staking platform...");
+  console.log("Transferring CSecretStakeCoin ownership to staking platform...:",secretStakePlatform.address);
+  const owner = await cSecretStakeCoinContract.owner()
+  console.log("owner:",owner);
+  
   const transferOwnershipTx = await cSecretStakeCoinContract.transferOwnership(secretStakePlatform.address);
   await transferOwnershipTx.wait();
   console.log("✅ Ownership transferred");
