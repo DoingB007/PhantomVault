@@ -1,18 +1,26 @@
-import { createInstance, SepoliaConfig, initSDK } from '@zama-fhe/relayer-sdk/bundle'
+import { createInstance, SepoliaConfig } from '@zama-fhe/relayer-sdk/bundle';
+import { initSDK } from '@zama-fhe/relayer-sdk/bundle';
 
 export const initFhevm = async () => {
-  // Initialize the SDK first
-  await initSDK()
-  
-  // Initialize the FHEVM instance for Sepolia testnet
-  const config = {
-    ...SepoliaConfig,
-    // Use the browser's ethereum provider
-    network: window.ethereum,
+  // if (typeof window !== 'undefined' && (window as any).fhevm) {
+  try {
+    // Initialize the SDK first
+    await initSDK()
+
+    // Initialize the FHEVM instance for Sepolia testnet
+    const config = {
+      ...SepoliaConfig,
+      // Use the browser's ethereum provider
+      network: window.ethereum,
+    }
+
+    const instance = await createInstance(config)
+    return instance
+    // }
+  } catch (error) {
+    console.error(error);
   }
-  
-  const instance = await createInstance(config)
-  return instance
+
 }
 
 // Contract addresses - update these with your deployed contract addresses

@@ -1,7 +1,9 @@
 import { useFHEVM } from '../hooks/useFHEVM'
+import { useAccount } from 'wagmi'
 
 export function FHEVMStatus() {
   const { instance, isLoading, error, initializeInstance } = useFHEVM()
+  const { isConnected } = useAccount()
 
   if (isLoading) {
     return (
@@ -30,6 +32,17 @@ export function FHEVMStatus() {
   }
 
   if (!instance) {
+    if (!isConnected) {
+      return (
+        <div className="card">
+          <div className="text-center">
+            <p className="text-sm text-yellow-600 mb-2">⚡ Connect wallet to enable FHEVM</p>
+            <p className="text-xs text-gray-500">Please connect your wallet first</p>
+          </div>
+        </div>
+      )
+    }
+    
     return (
       <div className="card">
         <div className="text-center">

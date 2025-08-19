@@ -1,5 +1,6 @@
-import { createContext, useContext, useEffect, useState, ReactNode } from 'react'
+import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
 import type { FhevmInstance } from '@zama-fhe/relayer-sdk/bundle'
+import { useAccount } from 'wagmi'
 import { initFhevm } from '../config/fhevm'
 
 interface FHEVMContextType {
@@ -19,6 +20,7 @@ export function FHEVMProvider({ children }: FHEVMProviderProps) {
   const [instance, setInstance] = useState<FhevmInstance | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const { isConnected } = useAccount()
 
   const initializeInstance = async () => {
     if (instance || isLoading) return
@@ -29,7 +31,11 @@ export function FHEVMProvider({ children }: FHEVMProviderProps) {
     try {
       console.log('Initializing FHEVM instance...')
       const fhevmInstance = await initFhevm()
-      setInstance(fhevmInstance)
+      if(fhevmInstance){
+        console.log("fhevmInstance success!");
+        setInstance(fhevmInstance)
+      }
+
       console.log('FHEVM instance initialized successfully')
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to initialize FHEVM'
@@ -41,11 +47,17 @@ export function FHEVMProvider({ children }: FHEVMProviderProps) {
   }
 
   useEffect(() => {
-    // Auto-initialize when window.ethereum is available
-    if (window.ethereum) {
+    // Only auto-initialize when wallet is connected
+    if (isConnected && !instance && !isLoading) {
       initializeInstance()
     }
-  }, [])
+    // Clear instance when wallet is disconnected
+    if (!isConnected && instance) {
+      setInstance(null)
+      setError(null)
+      console.log('Wallet disconnected, clearing FHEVM instance')
+    }
+  }, [isConnected, instance, isLoading])
 
   const value: FHEVMContextType = {
     instance,
