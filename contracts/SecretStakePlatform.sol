@@ -9,7 +9,7 @@ import {IERC20} from "@openzeppelin/contracts/interfaces/IERC20.sol";
 import {cUSDT} from "./cUSDT.sol";
 import {CSecretStakeCoin} from "./cSecretStakeCoin.sol";
 
-contract SimpleSecretStakePlatform is SepoliaConfig, Ownable, ReentrancyGuard {
+contract SecretStakePlatform is SepoliaConfig, Ownable, ReentrancyGuard {
     using FHE for euint64;
     using FHE for ebool;
 
@@ -22,10 +22,12 @@ contract SimpleSecretStakePlatform is SepoliaConfig, Ownable, ReentrancyGuard {
     uint256 public constant REWARD_PER_BLOCK = 1e18; // 1 cSSC per block
     uint256 public lastRewardBlock;
     euint64 public totalStaked;
+    euint64 public accRewardPerShare; // Accumulated reward per share, scaled by 1e12
 
     // User staking info
     struct UserInfo {
         euint64 stakedAmount;     // Encrypted staked amount
+        euint64 rewardDebt;       // Encrypted reward debt for reward calculation
         uint256 lastStakeBlock;   // Block number of last stake action
     }
 
@@ -36,6 +38,7 @@ contract SimpleSecretStakePlatform is SepoliaConfig, Ownable, ReentrancyGuard {
     event Staked(address indexed user, uint256 blockNumber);
     event Withdrawn(address indexed user, uint256 blockNumber);
     event RewardClaimed(address indexed user, uint256 blockNumber);
+    event RewardPoolUpdated(uint256 blockNumber);
 
     // Error tracking for FHE operations
     struct LastError {
@@ -60,6 +63,7 @@ contract SimpleSecretStakePlatform is SepoliaConfig, Ownable, ReentrancyGuard {
         
         lastRewardBlock = block.number;
         totalStaked = euint64.wrap(bytes32(0));
+        accRewardPerShare = euint64.wrap(bytes32(0));
 
         // Initialize error codes
         NO_ERROR = euint64.wrap(bytes32(0));
@@ -67,11 +71,44 @@ contract SimpleSecretStakePlatform is SepoliaConfig, Ownable, ReentrancyGuard {
         INVALID_AMOUNT = euint64.wrap(bytes32(uint256(2)));
     }
 
+    // Update reward pool - distributes rewards based on blocks passed
+    function updatePool() public {
+        if (block.number <= lastRewardBlock) {
+            return;
+        }
+
+        // Ensure ACL permissions for state variables
+        FHE.allowThis(totalStaked);
+        FHE.allowThis(accRewardPerShare);
+
+        // Always calculate rewards - FHE operations will handle zero cases automatically
+        uint256 blocksPassed = block.number - lastRewardBlock;
+        uint256 totalRewards = blocksPassed * REWARD_PER_BLOCK;
+        
+        // Only calculate if total rewards > 0
+        if (totalRewards > 0) {
+            // Since FHE.div only supports plaintext divisors, we'll use a simplified approach
+            // We'll distribute rewards proportionally but avoid encrypted division
+            // For now, we'll add a fixed amount per staker per block
+            euint64 rewardPerShareIncrease = euint64.wrap(bytes32(totalRewards * 1e12));
+            
+            accRewardPerShare = FHE.add(accRewardPerShare, rewardPerShareIncrease);
+            
+            // Mint rewards to this contract for distribution
+            rewardToken.mintPlain(address(this), totalRewards);
+        }
+
+        lastRewardBlock = block.number;
+        emit RewardPoolUpdated(block.number);
+    }
+
     // Stake cUSDT tokens
     function stake(
         externalEuint64 _encryptedAmount,
         bytes calldata _inputProof
     ) external nonReentrant {
+        updatePool();
+
         // Validate and convert external input
         euint64 amount = FHE.fromExternal(_encryptedAmount, _inputProof);
         
@@ -95,6 +132,19 @@ contract SimpleSecretStakePlatform is SepoliaConfig, Ownable, ReentrancyGuard {
 
         // Get user info
         UserInfo storage user = userInfo[msg.sender];
+        
+        // Calculate pending rewards before updating user info
+        // Since FHE.div only supports plaintext divisors, use simplified calculation
+        euint64 userRewardShare = FHE.mul(user.stakedAmount, accRewardPerShare);
+        euint64 pending = FHE.select(
+            FHE.gt(user.stakedAmount, 0),
+            FHE.select(
+                FHE.ge(userRewardShare, user.rewardDebt),
+                FHE.sub(userRewardShare, user.rewardDebt),
+                euint64.wrap(bytes32(0))
+            ),
+            euint64.wrap(bytes32(0))
+        );
 
         // Transfer staking tokens from user (conditional transfer)
         euint64 transferAmount = FHE.select(canStake, amount, euint64.wrap(bytes32(0)));
@@ -107,15 +157,25 @@ contract SimpleSecretStakePlatform is SepoliaConfig, Ownable, ReentrancyGuard {
         // Update total staked
         totalStaked = FHE.add(totalStaked, transferAmount);
         
+        // Update reward debt
+        user.rewardDebt = FHE.mul(user.stakedAmount, accRewardPerShare);
         user.lastStakeBlock = block.number;
         
         // Increment stake count
         userStakeCount[msg.sender]++;
 
+        // Send pending rewards if any
+        ebool hasPendingRewards = FHE.gt(pending, 0);
+        euint64 rewardToSend = FHE.select(hasPendingRewards, pending, euint64.wrap(bytes32(0)));
+        FHE.allowTransient(rewardToSend, address(rewardToken));
+        rewardToken.confidentialTransfer(msg.sender, rewardToSend);
+
         // Grant ACL permissions
         FHE.allowThis(user.stakedAmount);
         FHE.allow(user.stakedAmount, msg.sender);
+        FHE.allowThis(user.rewardDebt);
         FHE.allowThis(totalStaked);
+        FHE.allowThis(accRewardPerShare);
 
         emit Staked(msg.sender, block.number);
     }
@@ -125,6 +185,8 @@ contract SimpleSecretStakePlatform is SepoliaConfig, Ownable, ReentrancyGuard {
         externalEuint64 _encryptedAmount,
         bytes calldata _inputProof
     ) external nonReentrant {
+        updatePool();
+
         // Validate and convert external input
         euint64 amount = FHE.fromExternal(_encryptedAmount, _inputProof);
         
@@ -143,6 +205,18 @@ contract SimpleSecretStakePlatform is SepoliaConfig, Ownable, ReentrancyGuard {
         );
         setLastError(errorCode, msg.sender);
 
+        // Calculate pending rewards
+        euint64 userRewardShare = FHE.mul(user.stakedAmount, accRewardPerShare);
+        euint64 pending = FHE.select(
+            FHE.gt(user.stakedAmount, 0),
+            FHE.select(
+                FHE.ge(userRewardShare, user.rewardDebt),
+                FHE.sub(userRewardShare, user.rewardDebt),
+                euint64.wrap(bytes32(0))
+            ),
+            euint64.wrap(bytes32(0))
+        );
+
         // Conditional withdrawal
         euint64 withdrawAmount = FHE.select(canWithdraw, amount, euint64.wrap(bytes32(0)));
         
@@ -151,38 +225,58 @@ contract SimpleSecretStakePlatform is SepoliaConfig, Ownable, ReentrancyGuard {
         
         // Update total staked
         totalStaked = FHE.sub(totalStaked, withdrawAmount);
+        
+        // Update reward debt
+        user.rewardDebt = FHE.mul(user.stakedAmount, accRewardPerShare);
 
         // Transfer staked tokens back to user
         FHE.allowTransient(withdrawAmount, address(stakingToken));
         stakingToken.confidentialTransfer(msg.sender, withdrawAmount);
 
+        // Send pending rewards
+        ebool hasPendingRewards = FHE.gt(pending, 0);
+        euint64 rewardToSend = FHE.select(hasPendingRewards, pending, euint64.wrap(bytes32(0)));
+        FHE.allowTransient(rewardToSend, address(rewardToken));
+        rewardToken.confidentialTransfer(msg.sender, rewardToSend);
+
         // Grant ACL permissions
         FHE.allowThis(user.stakedAmount);
         FHE.allow(user.stakedAmount, msg.sender);
+        FHE.allowThis(user.rewardDebt);
         FHE.allowThis(totalStaked);
 
         emit Withdrawn(msg.sender, block.number);
     }
 
-    // Claim rewards - simplified version that gives fixed rewards
+    // Claim pending rewards without withdrawing staked amount
     function claimRewards() external nonReentrant {
+        updatePool();
+
         UserInfo storage user = userInfo[msg.sender];
         
-        // Simple reward calculation: fixed amount per block since last stake
-        uint256 blocksSinceStake = block.number - user.lastStakeBlock;
-        uint256 rewardAmount = blocksSinceStake * 1e17; // 0.1 cSSC per block
-        
-        // Update last stake block to prevent double claiming
-        user.lastStakeBlock = block.number;
+        // Calculate pending rewards
+        euint64 userRewardShare = FHE.mul(user.stakedAmount, accRewardPerShare);
+        euint64 pending = FHE.select(
+            FHE.gt(user.stakedAmount, 0),
+            FHE.select(
+                FHE.ge(userRewardShare, user.rewardDebt),
+                FHE.sub(userRewardShare, user.rewardDebt),
+                euint64.wrap(bytes32(0))
+            ),
+            euint64.wrap(bytes32(0))
+        );
 
-        // For simplicity, always mint and transfer rewards
-        // In a real implementation, you'd check if user has staked
-        if (rewardAmount > 0) {
-            rewardToken.mintPlain(address(this), rewardAmount);
-            euint64 rewardToSend = euint64.wrap(bytes32(rewardAmount));
-            FHE.allowTransient(rewardToSend, address(rewardToken));
-            rewardToken.confidentialTransfer(msg.sender, rewardToSend);
-        }
+        // Update reward debt
+        user.rewardDebt = FHE.mul(user.stakedAmount, accRewardPerShare);
+
+        // Transfer pending rewards
+        ebool hasPendingRewards = FHE.gt(pending, 0);
+        euint64 rewardToSend = FHE.select(hasPendingRewards, pending, euint64.wrap(bytes32(0)));
+        FHE.allowTransient(rewardToSend, address(rewardToken));
+        rewardToken.confidentialTransfer(msg.sender, rewardToSend);
+
+        // Grant ACL permissions
+        FHE.allowThis(user.rewardDebt);
 
         emit RewardClaimed(msg.sender, block.number);
     }
@@ -192,8 +286,48 @@ contract SimpleSecretStakePlatform is SepoliaConfig, Ownable, ReentrancyGuard {
         return userInfo[_user].stakedAmount;
     }
 
+    function getUserRewardDebt(address _user) external view returns (euint64) {
+        return userInfo[_user].rewardDebt;
+    }
+
     function getTotalStaked() external view returns (euint64) {
         return totalStaked;
+    }
+
+    function getAccRewardPerShare() external view returns (euint64) {
+        return accRewardPerShare;
+    }
+
+    // Calculate pending rewards for a user
+    // Note: This function needs to be non-view because FHE operations may modify state
+    function pendingRewards(address _user) external returns (euint64) {
+        UserInfo memory user = userInfo[_user];
+        
+        // Always calculate pending rewards, let FHE handle zero cases
+        euint64 currentAccRewardPerShare = accRewardPerShare;
+        
+        // Calculate what the accRewardPerShare would be if we updated now
+        if (block.number > lastRewardBlock) {
+            uint256 blocksPassed = block.number - lastRewardBlock;
+            uint256 totalRewards = blocksPassed * REWARD_PER_BLOCK;
+            
+            if (totalRewards > 0) {
+                // Since FHE.div only supports plaintext divisors, use simplified approach
+                euint64 rewardPerShareIncrease = euint64.wrap(bytes32(totalRewards * 1e12));
+                currentAccRewardPerShare = FHE.add(accRewardPerShare, rewardPerShareIncrease);
+            }
+        }
+
+        euint64 userRewardShare = FHE.mul(user.stakedAmount, currentAccRewardPerShare);
+        return FHE.select(
+            FHE.gt(user.stakedAmount, 0),
+            FHE.select(
+                FHE.ge(userRewardShare, user.rewardDebt),
+                FHE.sub(userRewardShare, user.rewardDebt),
+                euint64.wrap(bytes32(0))
+            ),
+            euint64.wrap(bytes32(0))
+        );
     }
 
     // Error handling functions
@@ -209,22 +343,22 @@ contract SimpleSecretStakePlatform is SepoliaConfig, Ownable, ReentrancyGuard {
 
     // Events
     event ErrorChanged(address indexed user);
-    
-    // Helper function for testing - allows minting reward tokens
-    function mintRewardTokens(address to, uint256 amount) external onlyOwner {
-        rewardToken.mintPlain(to, amount);
-    }
+    event EmergencyWithdrawCalled(address indexed caller, uint256 blockNumber);
 
     // Emergency functions (onlyOwner)
     function emergencyWithdraw() external onlyOwner {
         // Emergency withdraw - for simplicity, this function exists but may not
         // be able to transfer encrypted balances without proper FHE access
         // In a real implementation, this would need careful ACL management
-        
+
         // For now, this function succeeds but may not transfer anything
         // if there are no tokens or if FHE access is not properly set up
         emit EmergencyWithdrawCalled(msg.sender, block.number);
     }
-    
-    event EmergencyWithdrawCalled(address indexed caller, uint256 blockNumber);
+
+    function updateRewardPerBlock(uint256 /* _newRewardPerBlock */) external onlyOwner {
+        updatePool();
+        // Note: In a real implementation, you might want to make REWARD_PER_BLOCK a state variable
+        // For now, this is just a placeholder for the interface
+    }
 }
