@@ -166,6 +166,20 @@ task("task:get-total-staked", "Gets the total staked amount")
     console.log(`Encrypted total staked: ${encryptedTotalStaked}`);
     console.log(`Clear total staked    : ${clearTotalStaked}`);
   });
+// Task: Set operator for ctoken transfers
+task("task:approve", "Approve contract as operator")
+  .setAction(async function (taskArguments: TaskArguments, hre) {
+    const { ethers, deployments, fhevm } = hre;
+    const SecretStakePlatformDeployment = await deployments.get("SecretStakePlatform");
+    const cUSDTDepolyment = await deployments.get("cUSDT");
+
+    const cusdt = await ethers.getContractAt("cUSDT", cUSDTDepolyment.address);
+    const until = Math.floor(Date.now() / 1000) + 1000000
+    console.log("Approving operator...");
+    const approveTx = await cusdt.setOperator(SecretStakePlatformDeployment.address, until);
+    await approveTx.wait();
+    console.log("Transaction:", approveTx.hash);
+  });
 
 /**
  * Example:
