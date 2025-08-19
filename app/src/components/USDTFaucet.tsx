@@ -13,29 +13,8 @@ const MOCK_USDT_ABI = [
     type: 'function'
   },
   {
-    inputs: [],
-    name: 'FAUCET_AMOUNT',
-    outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
-    stateMutability: 'view',
-    type: 'function'
-  },
-  {
-    inputs: [{ internalType: 'address', name: 'user', type: 'address' }],
-    name: 'canClaim',
-    outputs: [{ internalType: 'bool', name: '', type: 'bool' }],
-    stateMutability: 'pure',
-    type: 'function'
-  },
-  {
     inputs: [{ internalType: 'address', name: 'user', type: 'address' }],
     name: 'getTotalClaims',
-    outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
-    stateMutability: 'view',
-    type: 'function'
-  },
-  {
-    inputs: [{ internalType: 'address', name: 'account', type: 'address' }],
-    name: 'balanceOf',
     outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
     stateMutability: 'view',
     type: 'function'
@@ -46,27 +25,11 @@ export function USDTFaucet() {
   const { address, isConnected } = useAccount()
   const [isClaiming, setIsClaiming] = useState(false)
 
-  // Read faucet amount
-  const { data: faucetAmount } = useContractRead({
-    address: MOCK_USDT_ADDRESS,
-    abi: MOCK_USDT_ABI,
-    functionName: 'FAUCET_AMOUNT',
-  })
-
   // Read user's total claims
   const { data: totalClaims, refetch: refetchClaims } = useContractRead({
     address: MOCK_USDT_ADDRESS,
     abi: MOCK_USDT_ABI,
     functionName: 'getTotalClaims',
-    args: address ? [address] : undefined,
-    enabled: !!address,
-  })
-
-  // Check if user can claim
-  const { data: canClaim } = useContractRead({
-    address: MOCK_USDT_ADDRESS,
-    abi: MOCK_USDT_ABI,
-    functionName: 'canClaim',
     args: address ? [address] : undefined,
     enabled: !!address,
   })
@@ -79,7 +42,7 @@ export function USDTFaucet() {
   })
 
   const handleClaimFaucet = async () => {
-    if (!claimFaucet || !canClaim) return
+    if (!claimFaucet) return
 
     setIsClaiming(true)
     try {
@@ -121,16 +84,16 @@ export function USDTFaucet() {
       </h2>
       
       <div className="space-y-4">
-        <div className="bg-blue-50 p-4 rounded-lg">
+        <div className="bg-green-50 p-4 rounded-lg">
           <div className="flex justify-between items-center mb-2">
-            <span className="text-sm font-medium text-blue-800">Faucet Amount:</span>
-            <span className="text-sm text-blue-600">
-              {faucetAmount ? formatEther(faucetAmount) : '0'} USDT
+            <span className="text-sm font-medium text-green-800">Claim Amount:</span>
+            <span className="text-sm text-green-600">
+              1,000 USDT
             </span>
           </div>
           <div className="flex justify-between items-center">
-            <span className="text-sm font-medium text-blue-800">Your Total Claims:</span>
-            <span className="text-sm text-blue-600">
+            <span className="text-sm font-medium text-green-800">Your Total Claims:</span>
+            <span className="text-sm text-green-600">
               {totalClaims?.toString() || '0'}
             </span>
           </div>
@@ -138,14 +101,14 @@ export function USDTFaucet() {
 
         <button
           onClick={handleClaimFaucet}
-          disabled={!canClaim || isClaiming}
+          disabled={!address || isClaiming}
           className="btn btn-primary btn-full"
         >
-          {isClaiming ? 'Claiming...' : 'Claim USDT'}
+          {isClaiming ? 'Claiming...' : 'Claim 1,000 USDT'}
         </button>
 
         <p className="text-xs text-gray-500 text-center">
-          Free USDT tokens for testing. No cooldown period.
+          Free USDT tokens for testing. Unlimited claims, no cooldown.
         </p>
       </div>
     </div>

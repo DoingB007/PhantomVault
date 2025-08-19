@@ -3,6 +3,9 @@ import { StakePanel } from './components/StakePanel'
 import { StakeInfo } from './components/StakeInfo'
 import { PlatformStats } from './components/PlatformStats'
 import { FHEVMStatus } from './components/FHEVMStatus'
+import { USDTFaucet } from './components/USDTFaucet'
+import { TokenBalances } from './components/TokenBalances'
+import { USDTWrapper } from './components/USDTWrapper'
 import './App.css'
 
 function App() {
@@ -25,6 +28,14 @@ function App() {
           <FHEVMStatus />
         </div>
 
+        {/* Token Management Section */}
+        <div className="grid grid-3 mb-8">
+          <USDTFaucet />
+          <TokenBalances />
+          <USDTWrapper />
+        </div>
+
+        {/* Staking Section */}
         <div className="grid grid-2 mb-8">
           <StakePanel />
           <StakeInfo />
