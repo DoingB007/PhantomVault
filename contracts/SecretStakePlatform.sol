@@ -17,7 +17,6 @@ contract SecretStakePlatform is SepoliaConfig, Ownable, ReentrancyGuard {
     // Token contracts
     cUSDT public immutable stakingToken;
     CSecretStakeCoin public immutable rewardToken;
-    IERC20 public immutable underlyingUSDT;
 
     // Reward configuration
     uint256 public constant REWARD_PER_BLOCK = 1e18; // 1 cSSC per block
@@ -53,8 +52,7 @@ contract SecretStakePlatform is SepoliaConfig, Ownable, ReentrancyGuard {
     euint64 internal INSUFFICIENT_BALANCE;
     euint64 internal INVALID_AMOUNT;
 
-    constructor(address _underlyingUSDT, address _stakingToken, address _rewardToken) Ownable(msg.sender) {
-        underlyingUSDT = IERC20(_underlyingUSDT);
+    constructor(address _stakingToken, address _rewardToken) Ownable(msg.sender) {
         stakingToken = cUSDT(_stakingToken);
         rewardToken = CSecretStakeCoin(_rewardToken);
 
