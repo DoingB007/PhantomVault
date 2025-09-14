@@ -1,65 +1,45 @@
-import { useAccount, useContractRead, useBalance } from 'wagmi'
+import { useEffect, useState } from 'react'
+import { useAccount, useReadContract, useBalance } from 'wagmi'
 import { formatEther } from 'viem'
 import { useFHEVM } from '../hooks/useFHEVM'
+import { CONTRACT_ADDRESSES } from '../config/fhevm'
+import CUSDT_ABI from '../abis/cUSDT.json'
 
-const MOCK_USDT_ADDRESS = '0x5FbDB2315678afecb367f032d93F642f64180aa3'
-const CUSDT_ADDRESS = '0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512'
+const CUSDT_ADDRESS = CONTRACT_ADDRESSES.CUSDT
 
-const ERC20_ABI = [
-  {
-    inputs: [{ internalType: 'address', name: 'account', type: 'address' }],
-    name: 'balanceOf',
-    outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
-    stateMutability: 'view',
-    type: 'function'
-  },
-  {
-    inputs: [],
-    name: 'name',
-    outputs: [{ internalType: 'string', name: '', type: 'string' }],
-    stateMutability: 'view',
-    type: 'function'
-  },
-  {
-    inputs: [],
-    name: 'symbol',
-    outputs: [{ internalType: 'string', name: '', type: 'string' }],
-    stateMutability: 'view',
-    type: 'function'
-  }
-] as const
-
-const FHEVM_ABI = [
-  {
-    inputs: [{ internalType: 'address', name: 'account', type: 'address' }],
-    name: 'balanceOf',
-    outputs: [{ internalType: 'euint64', name: '', type: 'uint256' }],
-    stateMutability: 'view',
-    type: 'function'
-  }
-] as const
+// Minimal ConfidentialFungibleToken ABI subset
+const CFT_ABI = CUSDT_ABI as any
 
 export function TokenBalances() {
   const { address, isConnected } = useAccount()
   const { instance: fhevmInstance } = useFHEVM()
-
-  // Read USDT balance
-  const { data: usdtBalance, refetch: refetchUSDT } = useContractRead({
-    address: MOCK_USDT_ADDRESS,
-    abi: ERC20_ABI,
-    functionName: 'balanceOf',
-    args: address ? [address] : undefined,
-    enabled: !!address,
-  })
+  const [isRevealed, setIsRevealed] = useState(false)
+  const [isDecrypting, setIsDecrypting] = useState(false)
+  const [decryptedCUSDT, setDecryptedCUSDT] = useState<string | null>(null)
 
   // Read cUSDT balance (encrypted)
-  const { data: cUSDTBalance, refetch: refetchCUSDT } = useContractRead({
+  const { data: encryptedCUSDT, refetch: refetchCUSDT } = useReadContract({
     address: CUSDT_ADDRESS,
-    abi: FHEVM_ABI,
-    functionName: 'balanceOf',
+    abi: CFT_ABI,
+    functionName: 'confidentialBalanceOf',
     args: address ? [address] : undefined,
-    enabled: !!address,
-  })
+    query: { enabled: !!address },
+  }) as any
+  const { data: cusdtSymbol } = useReadContract({ address: CUSDT_ADDRESS, abi: CFT_ABI, functionName: 'symbol' }) as any
+
+  const handleDecrypt = async () => {
+    // Placeholder: toggle reveal. Wire real decryption with relayer SDK later.
+    setIsDecrypting(true)
+    try {
+      if (!isRevealed) {
+        setIsRevealed(true)
+      } else {
+        setIsRevealed(false)
+      }
+    } finally {
+      setIsDecrypting(false)
+    }
+  }
 
   // ETH balance
   const { data: ethBalance } = useBalance({
@@ -101,51 +81,48 @@ export function TokenBalances() {
           </span>
         </div>
 
-        {/* USDT Balance */}
-        <div className="flex justify-between items-center p-3 bg-green-50 rounded-lg">
-          <div className="flex items-center space-x-2">
-            <div className="w-6 h-6 bg-green-500 rounded-full flex items-center justify-center">
-              <span className="text-white text-xs font-bold">U</span>
-            </div>
-            <span className="font-medium text-gray-900">USDT</span>
-          </div>
-          <div className="text-right">
-            <span className="font-mono text-sm text-gray-700">
-              {usdtBalance ? parseFloat(formatEther(usdtBalance)).toFixed(2) : '0.00'}
-            </span>
-            <button
-              onClick={() => refetchUSDT()}
-              className="ml-2 text-xs text-green-600 hover:text-green-800"
-              title="Refresh balance"
-            >
-              ↻
-            </button>
-          </div>
-        </div>
-
-        {/* cUSDT Balance */}
+        {/* cUSDT Balance (Confidential) */}
         <div className="flex justify-between items-center p-3 bg-blue-50 rounded-lg">
           <div className="flex items-center space-x-2">
             <div className="w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center">
               <span className="text-white text-xs font-bold">c</span>
             </div>
-            <span className="font-medium text-gray-900">cUSDT</span>
+            <span className="font-medium text-gray-900">{(cusdtSymbol as string) || 'cUSDT'}</span>
           </div>
           <div className="text-right">
-            <span className="font-mono text-sm text-gray-700">
-              {cUSDTBalance ? (
-                <span className="italic">Encrypted</span>
-              ) : (
-                '0.00'
-              )}
-            </span>
-            <button
-              onClick={() => refetchCUSDT()}
-              className="ml-2 text-xs text-blue-600 hover:text-blue-800"
-              title="Refresh balance"
-            >
-              ↻
-            </button>
+            {(() => {
+              const zeroHash = '0x0000000000000000000000000000000000000000000000000000000000000000'
+              const enc = (encryptedCUSDT as string) || ''
+              if (!enc || enc.toLowerCase() === zeroHash) {
+                return <span className="font-mono text-sm text-gray-700">0</span>
+              }
+              if (!isRevealed) {
+                return <span className="font-mono text-sm text-gray-700">***</span>
+              }
+              // Revealed view: show ciphertext for now (real decrypt wiring pending)
+              return (
+                <>
+                  <span className="font-mono text-xs text-gray-500">密文</span>
+                  <div className="text-[10px] text-gray-500 max-w-[220px] break-all">{enc}</div>
+                </>
+              )
+            })()}
+            <div className="flex items-center gap-2 justify-end mt-1">
+              <button
+                onClick={handleDecrypt}
+                className="text-xs text-blue-600 hover:text-blue-800"
+                disabled={isDecrypting}
+              >
+                {isRevealed ? '隐藏' : '解密'}
+              </button>
+              <button
+                onClick={() => refetchCUSDT()}
+                className="text-xs text-blue-600 hover:text-blue-800"
+                title="Refresh balance"
+              >
+                ↻
+              </button>
+            </div>
           </div>
         </div>
 

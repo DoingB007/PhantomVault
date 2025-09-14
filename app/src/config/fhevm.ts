@@ -25,7 +25,8 @@ export const initFhevm = async () => {
 
 // Contract addresses - update these with your deployed contract addresses
 export const CONTRACT_ADDRESSES = {
-  SECRET_STAKE_PLATFORM: '', // To be filled when contract is deployed
-  CUSDT: '', // Confidential USDT address
-  CSSC: '', // Confidential SecretStakeCoin address
+  // Update these if you redeploy
+  SECRET_STAKE_PLATFORM: '0xFfF3b160fE9CA69f6013F2BC1EB114DA154e5a91',
+  CUSDT: '0x5a4181ed6afd6E77154AB8B18EB8fF70438456EE',
+  CSSC: '0x6F8F8915053378764CeCfE58BBCbAf1EdC626C38',
 } as const

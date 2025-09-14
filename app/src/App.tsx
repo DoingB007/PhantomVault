@@ -4,8 +4,7 @@ import { StakeInfo } from './components/StakeInfo'
 import { PlatformStats } from './components/PlatformStats'
 import { FHEVMStatus } from './components/FHEVMStatus'
 import { USDTFaucet } from './components/USDTFaucet'
-import { TokenBalances } from './components/TokenBalances'
-import { USDTWrapper } from './components/USDTWrapper'
+// import { TokenBalances } from './components/TokenBalances'
 import './App.css'
 
 function App() {
@@ -15,25 +14,15 @@ function App() {
       
       <main className="main">
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">
-            Secret Stake Platform
-          </h1>
           <p className="text-gray-600">
             Stake confidential USDT (cUSDT) and earn confidential SecretStakeCoin (cSSC) rewards. 
             All amounts are encrypted using Zama's Fully Homomorphic Encryption.
           </p>
         </div>
 
-        <div className="mb-4">
-          <FHEVMStatus />
-        </div>
+        {/* FHEVM status moved into Header */}
 
-        {/* Token Management Section */}
-        <div className="grid grid-3 mb-8">
-          <USDTFaucet />
-          <TokenBalances />
-          <USDTWrapper />
-        </div>
+        {/* Token balances merged into StakePanel */}
 
         {/* Staking Section */}
         <div className="grid grid-2 mb-8">
@@ -42,6 +31,11 @@ function App() {
         </div>
 
         <PlatformStats />
+
+        {/* USDT Faucet at the very bottom (single button only) */}
+        <div className="mt-8">
+          <USDTFaucet />
+        </div>
       </main>
     </div>
   )

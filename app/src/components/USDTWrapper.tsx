@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useAccount, useContractWrite, useContractRead } from 'wagmi'
+import { useAccount, useWriteContract, useReadContract } from 'wagmi'
 import { parseEther, formatEther } from 'viem'
 import { useFHEVM } from '../hooks/useFHEVM'
 
@@ -57,52 +57,37 @@ export function USDTWrapper() {
   const [isApproving, setIsApproving] = useState(false)
 
   // Read USDT balance
-  const { data: usdtBalance, refetch: refetchUSDT } = useContractRead({
+  const { data: usdtBalance, refetch: refetchUSDT } = useReadContract({
     address: MOCK_USDT_ADDRESS,
     abi: USDT_ABI,
     functionName: 'balanceOf',
     args: address ? [address] : undefined,
-    enabled: !!address,
-  })
+    query: { enabled: !!address },
+  }) as any
 
   // Read USDT allowance for cUSDT contract
-  const { data: allowance, refetch: refetchAllowance } = useContractRead({
+  const { data: allowance, refetch: refetchAllowance } = useReadContract({
     address: MOCK_USDT_ADDRESS,
     abi: USDT_ABI,
     functionName: 'allowance',
     args: address ? [address, CUSDT_ADDRESS] : undefined,
-    enabled: !!address,
-  })
+    query: { enabled: !!address },
+  }) as any
 
-  // Approve USDT spending
-  const { writeAsync: approveUSDT } = useContractWrite({
-    address: MOCK_USDT_ADDRESS,
-    abi: USDT_ABI,
-    functionName: 'approve',
-  })
-
-  // Wrap USDT to cUSDT
-  const { writeAsync: wrapUSDT } = useContractWrite({
-    address: CUSDT_ADDRESS,
-    abi: CUSDT_ABI,
-    functionName: 'wrap',
-  })
-
-  // Unwrap cUSDT to USDT
-  const { writeAsync: unwrapCUSDT } = useContractWrite({
-    address: CUSDT_ADDRESS,
-    abi: CUSDT_ABI,
-    functionName: 'unwrap',
-  })
+  // Write contract helper (wagmi v2)
+  const { writeContractAsync } = useWriteContract()
 
   const handleApprove = async () => {
-    if (!approveUSDT || !wrapAmount) return
+    if (!writeContractAsync || !wrapAmount) return
 
     setIsApproving(true)
     try {
       const amount = parseEther(wrapAmount)
-      const tx = await approveUSDT({
-        args: [CUSDT_ADDRESS, amount]
+      const tx = await writeContractAsync({
+        address: MOCK_USDT_ADDRESS,
+        abi: USDT_ABI,
+        functionName: 'approve',
+        args: [CUSDT_ADDRESS, amount],
       })
       console.log('Approval transaction:', tx)
       
@@ -118,13 +103,16 @@ export function USDTWrapper() {
   }
 
   const handleWrap = async () => {
-    if (!wrapUSDT || !wrapAmount) return
+    if (!writeContractAsync || !wrapAmount) return
 
     setIsWrapping(true)
     try {
       const amount = parseEther(wrapAmount)
-      const tx = await wrapUSDT({
-        args: [amount]
+      const tx = await writeContractAsync({
+        address: CUSDT_ADDRESS,
+        abi: CUSDT_ABI,
+        functionName: 'wrap',
+        args: [amount],
       })
       console.log('Wrap transaction:', tx)
       
@@ -141,7 +129,7 @@ export function USDTWrapper() {
   }
 
   const handleUnwrap = async () => {
-    if (!unwrapCUSDT || !unwrapAmount || !fhevmInstance || !address) return
+    if (!writeContractAsync || !unwrapAmount || !fhevmInstance || !address) return
 
     setIsUnwrapping(true)
     try {
@@ -150,8 +138,11 @@ export function USDTWrapper() {
       input.add64(BigInt(parseEther(unwrapAmount).toString()))
       const encryptedInput = await input.encrypt()
       
-      const tx = await unwrapCUSDT({
-        args: [encryptedInput.handles[0], encryptedInput.inputProof]
+      const tx = await writeContractAsync({
+        address: CUSDT_ADDRESS,
+        abi: CUSDT_ABI,
+        functionName: 'unwrap',
+        args: [encryptedInput.handles[0], encryptedInput.inputProof],
       })
       console.log('Unwrap transaction:', tx)
       

@@ -1,7 +1,25 @@
 import { useAccount } from 'wagmi'
+import { ethers } from 'ethers'
+import { CONTRACT_ADDRESSES } from '../config/fhevm'
+import PLATFORM_ABI from '../abis/SecretStakePlatform.json'
 
 export function StakeInfo() {
   const { isConnected } = useAccount()
+  const handleClaim = async () => {
+    try {
+      if (!(window as any).ethereum) throw new Error('No wallet provider')
+      const provider = new ethers.BrowserProvider((window as any).ethereum)
+      const signer = await provider.getSigner()
+      const platform = new ethers.Contract(CONTRACT_ADDRESSES.SECRET_STAKE_PLATFORM, PLATFORM_ABI as any, signer)
+      const gasLimit = 12_000_000n
+      const tx = await platform.claimRewards({ gasLimit })
+      console.log('Claim tx:', tx.hash)
+      await tx.wait()
+      console.log('Claim confirmed')
+    } catch (e) {
+      console.error('Claim failed:', e)
+    }
+  }
 
   if (!isConnected) {
     return null
@@ -38,7 +56,7 @@ export function StakeInfo() {
         </div>
       </div>
 
-      <button className="btn btn-success btn-full mt-4">
+      <button className="btn btn-success btn-full mt-4" onClick={handleClaim}>
         Claim Rewards
       </button>
     </div>
