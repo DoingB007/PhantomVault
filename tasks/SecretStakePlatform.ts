@@ -196,7 +196,7 @@ task("task:stake", "Stakes cUSDT tokens to the platform")
     if (inputAmount <= 0n) {
       throw new Error(`Amount must be greater than 0`);
     }
-    
+
     const amount = inputAmount * BigInt(10 ** 6); // Convert to wei
 
     await fhevm.initializeCLIApi();
@@ -242,7 +242,7 @@ task("task:withdraw", "Withdraws staked tokens from the platform")
     if (inputAmount <= 0n) {
       throw new Error(`Amount must be greater than 0`);
     }
-    
+
     const amount = inputAmount * BigInt(10 ** 18); // Convert to wei
 
     await fhevm.initializeCLIApi();
@@ -353,7 +353,7 @@ task("task:get-last-error", "Gets the last error for a user")
     const platformContract = await ethers.getContractAt("SecretStakePlatform", SecretStakePlatformDeployment.address);
 
     const [encryptedError, timestamp] = await platformContract.getLastError(userAddress);
-    
+
     if (encryptedError === ethers.ZeroHash) {
       console.log(`Encrypted error: ${encryptedError}`);
       console.log("Clear error code: 0");
@@ -367,15 +367,15 @@ task("task:get-last-error", "Gets the last error for a user")
       SecretStakePlatformDeployment.address,
       signers[0],
     );
-    
+
     console.log(`Encrypted error: ${encryptedError}`);
     console.log(`Clear error code: ${clearError}`);
     console.log(`Timestamp: ${timestamp}`);
-    
+
     // Decode error meaning
-    const errorMeaning = clearError === 0n ? "NO_ERROR" : 
-                        clearError === 1n ? "INSUFFICIENT_BALANCE" :
-                        clearError === 2n ? "INVALID_AMOUNT" : "UNKNOWN_ERROR";
+    const errorMeaning = clearError === 0n ? "NO_ERROR" :
+      clearError === 1n ? "INSUFFICIENT_BALANCE" :
+        clearError === 2n ? "INVALID_AMOUNT" : "UNKNOWN_ERROR";
     console.log(`Error meaning: ${errorMeaning}`);
   });
 
@@ -406,7 +406,7 @@ task("task:get-user-info", "Gets comprehensive user information")
 
     // Get staked amount
     const encryptedStakedAmount = await platformContract.getUserStakedAmount(userAddress);
-    const clearStakedAmount = encryptedStakedAmount === ethers.ZeroHash ? 0n : 
+    const clearStakedAmount = encryptedStakedAmount === ethers.ZeroHash ? 0n :
       await fhevm.userDecryptEuint(FhevmType.euint64, encryptedStakedAmount, SecretStakePlatformDeployment.address, signers[0]);
     console.log(`Staked Amount: ${clearStakedAmount.toString()}`);
 
@@ -434,9 +434,9 @@ task("task:get-user-info", "Gets comprehensive user information")
     const [encryptedError, timestamp] = await platformContract.getLastError(userAddress);
     const clearError = encryptedError === ethers.ZeroHash ? 0n :
       await fhevm.userDecryptEuint(FhevmType.euint64, encryptedError, SecretStakePlatformDeployment.address, signers[0]);
-    const errorMeaning = clearError === 0n ? "NO_ERROR" : 
-                        clearError === 1n ? "INSUFFICIENT_BALANCE" :
-                        clearError === 2n ? "INVALID_AMOUNT" : "UNKNOWN_ERROR";
+    const errorMeaning = clearError === 0n ? "NO_ERROR" :
+      clearError === 1n ? "INSUFFICIENT_BALANCE" :
+        clearError === 2n ? "INVALID_AMOUNT" : "UNKNOWN_ERROR";
     console.log(`Last Error: ${errorMeaning} (${clearError}) at ${timestamp}`);
 
     console.log(`================================\n`);
@@ -496,126 +496,9 @@ task("task:platform-info", "Gets comprehensive platform information")
     // Get token addresses
     const stakingTokenAddress = await platformContract.stakingToken();
     const rewardTokenAddress = await platformContract.rewardToken();
-    const underlyingUSDTAddress = await platformContract.underlyingUSDT();
+
     console.log(`Staking Token (cUSDT): ${stakingTokenAddress}`);
     console.log(`Reward Token (cSSC): ${rewardTokenAddress}`);
-    console.log(`Underlying USDT: ${underlyingUSDTAddress}`);
 
     console.log(`==========================\n`);
-  });
-
-/**
- * Example:
- *   - npx hardhat --network localhost task:wrap-usdt --amount 2000
- *   - npx hardhat --network sepolia task:wrap-usdt --amount 2000
- */
-task("task:wrap-usdt", "Wraps USDT tokens to get cUSDT tokens")
-  .addParam("amount", "The amount of USDT to wrap (in standard units, will be converted to wei internally)")
-  .setAction(async function (taskArguments: TaskArguments, hre) {
-    const { ethers, deployments } = hre;
-
-    const inputAmount = BigInt(taskArguments.amount);
-    if (inputAmount <= 0n) {
-      throw new Error(`Amount must be greater than 0`);
-    }
-    
-    const amount = inputAmount * BigInt(10 ** 6); // USDT uses 6 decimals
-
-    const signers = await ethers.getSigners();
-    const signer = signers[0];
-
-    // Get contract addresses
-    const SecretStakePlatformDeployment = await deployments.get("SecretStakePlatform");
-    const platformContract = await ethers.getContractAt("SecretStakePlatform", SecretStakePlatformDeployment.address);
-    
-    const stakingTokenAddress = await platformContract.stakingToken();
-    const underlyingUSDTAddress = await platformContract.underlyingUSDT();
-    
-    console.log(`cUSDT Token: ${stakingTokenAddress}`);
-    console.log(`Underlying USDT: ${underlyingUSDTAddress}`);
-
-    const usdtContract = await ethers.getContractAt("MockUSDT", underlyingUSDTAddress);
-    const cUSDTContract = await ethers.getContractAt("cUSDT", stakingTokenAddress) as any;
-
-    // Check USDT balance
-    const usdtBalance = await usdtContract.balanceOf(signer.address);
-    console.log(`USDT Balance: ${usdtBalance.toString()}`);
-    
-    if (usdtBalance < amount) {
-      throw new Error(`Insufficient USDT balance. Have ${usdtBalance.toString()}, need ${amount.toString()}`);
-    }
-
-    // Step 1: Approve USDT to cUSDT contract
-    console.log(`Approving ${amount.toString()} USDT to cUSDT contract...`);
-    const approveTx = await usdtContract.connect(signer).approve(stakingTokenAddress, amount);
-    console.log(`Wait for approve tx:${approveTx.hash}...`);
-    await approveTx.wait();
-    console.log(`Approve tx:${approveTx.hash} completed`);
-
-    // Step 2: Wrap USDT to get cUSDT
-    console.log(`Wrapping ${amount.toString()} USDT to cUSDT...`);
-    const wrapTx = await cUSDTContract.connect(signer).wrap(signer.address, amount);
-    console.log(`Wait for wrap tx:${wrapTx.hash}...`);
-    
-    const receipt = await wrapTx.wait();
-    console.log(`Wrap tx:${wrapTx.hash} status=${receipt?.status}`);
-
-    console.log(`Wrap of ${inputAmount.toString()} USDT (${amount.toString()} units) succeeded!`);
-    console.log(`You now have cUSDT tokens that can be used for staking.`);
-  });
-
-/**
- * Example:
- *   - npx hardhat --network localhost task:unwrap-usdt --amount 1000
- *   - npx hardhat --network sepolia task:unwrap-usdt --amount 1000
- */
-task("task:unwrap-usdt", "Unwraps cUSDT tokens to get back USDT tokens")
-  .addParam("amount", "The amount of cUSDT to unwrap (in standard units, will be converted to wei internally)")
-  .setAction(async function (taskArguments: TaskArguments, hre) {
-    const { ethers, deployments, fhevm } = hre;
-
-    const inputAmount = BigInt(taskArguments.amount);
-    if (inputAmount <= 0n) {
-      throw new Error(`Amount must be greater than 0`);
-    }
-    
-    const amount = inputAmount * BigInt(10 ** 6); // USDT uses 6 decimals
-
-    await fhevm.initializeCLIApi();
-
-    const signers = await ethers.getSigners();
-    const signer = signers[0];
-
-    // Get contract addresses
-    const SecretStakePlatformDeployment = await deployments.get("SecretStakePlatform");
-    const platformContract = await ethers.getContractAt("SecretStakePlatform", SecretStakePlatformDeployment.address);
-    
-    const stakingTokenAddress = await platformContract.stakingToken();
-    const underlyingUSDTAddress = await platformContract.underlyingUSDT();
-    
-    console.log(`cUSDT Token: ${stakingTokenAddress}`);
-    console.log(`Underlying USDT: ${underlyingUSDTAddress}`);
-
-    const cUSDTContract = await ethers.getContractAt("cUSDT", stakingTokenAddress) as any;
-
-    // Encrypt the amount
-    const encryptedAmount = await fhevm
-      .createEncryptedInput(stakingTokenAddress, signer.address)
-      .add64(amount)
-      .encrypt();
-
-    console.log(`Unwrapping ${amount.toString()} cUSDT to USDT...`);
-    const unwrapTx = await cUSDTContract.connect(signer)["unwrap(address,address,bytes32,bytes)"](
-      signer.address, 
-      signer.address, 
-      encryptedAmount.handles[0], 
-      encryptedAmount.inputProof
-    );
-    console.log(`Wait for unwrap tx:${unwrapTx.hash}...`);
-    
-    const receipt = await unwrapTx.wait();
-    console.log(`Unwrap tx:${unwrapTx.hash} status=${receipt?.status}`);
-
-    console.log(`Unwrap of ${inputAmount.toString()} cUSDT (${amount.toString()} units) succeeded!`);
-    console.log(`You now have USDT tokens back.`);
   });
