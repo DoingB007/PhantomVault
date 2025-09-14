@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
 import type { FhevmInstance } from '@zama-fhe/relayer-sdk/bundle'
-import { useAccount } from 'wagmi'
+import { useAccount, useWalletClient } from 'wagmi'
 import { initFhevm } from '../config/fhevm'
 
 interface FHEVMContextType {
@@ -8,6 +8,7 @@ interface FHEVMContextType {
   isLoading: boolean
   error: string | null
   initializeInstance: () => Promise<void>
+  decryptEuint64: (contractAddress: string, handle: string | Uint8Array, options?: { start?: number; days?: number }) => Promise<bigint | null>
 }
 
 const FHEVMContext = createContext<FHEVMContextType | undefined>(undefined)
@@ -20,7 +21,8 @@ export function FHEVMProvider({ children }: FHEVMProviderProps) {
   const [instance, setInstance] = useState<FhevmInstance | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const { isConnected } = useAccount()
+  const { isConnected, address } = useAccount()
+  const { data: walletClient } = useWalletClient()
 
   const initializeInstance = async () => {
     if (instance || isLoading) return
@@ -46,6 +48,44 @@ export function FHEVMProvider({ children }: FHEVMProviderProps) {
     }
   }
 
+  const signAuth = async (publicKey: string, contracts: string[], start: number, days: number) => {
+    if (!instance) throw new Error('FHEVM instance not ready')
+    if (!address) throw new Error('Wallet not connected')
+    const eip712 = instance.createEIP712(publicKey, contracts, start, days)
+    if (!walletClient) throw new Error('No wallet client')
+    // viem walletClient signTypedData
+    const signature = await walletClient.signTypedData({
+      account: address as `0x${string}`,
+      domain: eip712.domain as any,
+      primaryType: eip712.primaryType as any,
+      types: eip712.types as any,
+      message: eip712.message as any,
+    })
+    return signature
+  }
+
+  const decryptEuint64: FHEVMContextType['decryptEuint64'] = async (contractAddress, handle, options) => {
+    try {
+      if (!instance) throw new Error('FHEVM instance not ready')
+      if (!address) throw new Error('Wallet not connected')
+      const start = options?.start ?? Math.floor(Date.now() / 1000)
+      const days = options?.days ?? 7
+      // Always generate fresh keypair and signature per request (no reuse)
+      const { publicKey, privateKey } = instance.generateKeypair()
+      const signature = await signAuth(publicKey, [contractAddress], start, days)
+      const res = await instance.userDecrypt([
+        { handle, contractAddress },
+      ], privateKey, publicKey, signature, [contractAddress], address, start, days)
+      const first = Object.values(res)[0] as bigint | string | boolean
+      if (typeof first === 'bigint') return first
+      if (typeof first === 'string') return BigInt(first)
+      return null
+    } catch (e) {
+      console.error('Decrypt failed:', e)
+      return null
+    }
+  }
+
   useEffect(() => {
     // Only auto-initialize when wallet is connected
     if (isConnected && !instance && !isLoading) {
@@ -64,6 +104,7 @@ export function FHEVMProvider({ children }: FHEVMProviderProps) {
     isLoading,
     error,
     initializeInstance,
+    decryptEuint64,
   }
 
   return (

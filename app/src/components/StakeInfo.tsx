@@ -1,10 +1,47 @@
-import { useAccount } from 'wagmi'
+import { useAccount, useReadContract } from 'wagmi'
 import { ethers } from 'ethers'
 import { CONTRACT_ADDRESSES } from '../config/fhevm'
 import PLATFORM_ABI from '../abis/SecretStakePlatform.json'
+import { useState } from 'react'
+import { useFHEVM } from '../hooks/useFHEVM'
 
 export function StakeInfo() {
-  const { isConnected } = useAccount()
+  const { address, isConnected } = useAccount()
+  const { decryptEuint64 } = useFHEVM()
+  const [isDecStake, setIsDecStake] = useState(false)
+  const [isDecRewards, setIsDecRewards] = useState(false)
+  const [stakeVal, setStakeVal] = useState<bigint | null>(null)
+  const [rewardsVal, setRewardsVal] = useState<bigint | null>(null)
+
+  const { data: userInfo } = useReadContract({
+    address: CONTRACT_ADDRESSES.SECRET_STAKE_PLATFORM as `0x${string}`,
+    abi: PLATFORM_ABI as any,
+    functionName: 'userInfo',
+    args: address ? [address] : undefined,
+    query: { enabled: !!address },
+  }) as any
+
+  const decryptStake = async () => {
+    if (!userInfo) return
+    setIsDecStake(true)
+    try {
+      const v = await decryptEuint64(CONTRACT_ADDRESSES.SECRET_STAKE_PLATFORM, userInfo[0] as string)
+      setStakeVal(v)
+    } finally {
+      setIsDecStake(false)
+    }
+  }
+
+  const decryptRewards = async () => {
+    if (!userInfo) return
+    setIsDecRewards(true)
+    try {
+      const v = await decryptEuint64(CONTRACT_ADDRESSES.SECRET_STAKE_PLATFORM, userInfo[1] as string)
+      setRewardsVal(v)
+    } finally {
+      setIsDecRewards(false)
+    }
+  }
   const handleClaim = async () => {
     try {
       if (!(window as any).ethereum) throw new Error('No wallet provider')
@@ -34,14 +71,28 @@ export function StakeInfo() {
       <div className="grid grid-2">
         <div className="card-gray">
           <h3 className="text-sm font-medium text-gray-500">Staked Amount</h3>
-          <p className="stat-value text-gray-900">***</p>
-          <p className="text-sm text-gray-600">cUSDT (Encrypted)</p>
+          <p className="stat-value text-gray-900">{
+            stakeVal == null ? '***' : (Number(stakeVal) / 1e6).toLocaleString(undefined, { maximumFractionDigits: 6 })
+          }</p>
+          <div className="flex items-center justify-between">
+            <p className="text-sm text-gray-600">cUSDT (Encrypted)</p>
+            <button className="text-xs text-blue-600 hover:text-blue-800" onClick={decryptStake} disabled={isDecStake}>
+              解密
+            </button>
+          </div>
         </div>
         
         <div className="card-gray">
           <h3 className="text-sm font-medium text-gray-500">Pending Rewards</h3>
-          <p className="stat-value text-green-600">***</p>
-          <p className="text-sm text-gray-600">cSSC (Encrypted)</p>
+          <p className="stat-value text-green-600">{
+            rewardsVal == null ? '***' : (Number(rewardsVal) / 1e6).toLocaleString(undefined, { maximumFractionDigits: 6 })
+          }</p>
+          <div className="flex items-center justify-between">
+            <p className="text-sm text-gray-600">cSSC (Encrypted)</p>
+            <button className="text-xs text-blue-600 hover:text-blue-800" onClick={decryptRewards} disabled={isDecRewards}>
+              解密
+            </button>
+          </div>
         </div>
       </div>
 

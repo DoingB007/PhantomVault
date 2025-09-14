@@ -12,10 +12,9 @@ const CFT_ABI = CUSDT_ABI as any
 
 export function TokenBalances() {
   const { address, isConnected } = useAccount()
-  const { instance: fhevmInstance } = useFHEVM()
-  const [isRevealed, setIsRevealed] = useState(false)
+  const { instance: fhevmInstance, decryptEuint64 } = useFHEVM()
   const [isDecrypting, setIsDecrypting] = useState(false)
-  const [decryptedCUSDT, setDecryptedCUSDT] = useState<string | null>(null)
+  const [decryptedCUSDT, setDecryptedCUSDT] = useState<bigint | null>(null)
 
   // Read cUSDT balance (encrypted)
   const { data: encryptedCUSDT, refetch: refetchCUSDT } = useReadContract({
@@ -28,14 +27,11 @@ export function TokenBalances() {
   const { data: cusdtSymbol } = useReadContract({ address: CUSDT_ADDRESS, abi: CFT_ABI, functionName: 'symbol' }) as any
 
   const handleDecrypt = async () => {
-    // Placeholder: toggle reveal. Wire real decryption with relayer SDK later.
+    if (!encryptedCUSDT) return
     setIsDecrypting(true)
     try {
-      if (!isRevealed) {
-        setIsRevealed(true)
-      } else {
-        setIsRevealed(false)
-      }
+      const val = await decryptEuint64(CUSDT_ADDRESS, encryptedCUSDT as string)
+      setDecryptedCUSDT(val)
     } finally {
       setIsDecrypting(false)
     }
@@ -96,16 +92,9 @@ export function TokenBalances() {
               if (!enc || enc.toLowerCase() === zeroHash) {
                 return <span className="font-mono text-sm text-gray-700">0</span>
               }
-              if (!isRevealed) {
-                return <span className="font-mono text-sm text-gray-700">***</span>
-              }
-              // Revealed view: show ciphertext for now (real decrypt wiring pending)
-              return (
-                <>
-                  <span className="font-mono text-xs text-gray-500">密文</span>
-                  <div className="text-[10px] text-gray-500 max-w-[220px] break-all">{enc}</div>
-                </>
-              )
+              if (decryptedCUSDT == null) return <span className="font-mono text-sm text-gray-700">***</span>
+              const human = Number(decryptedCUSDT) / 1e6
+              return <span className="font-mono text-sm text-gray-900">{human.toLocaleString(undefined, { maximumFractionDigits: 6 })}</span>
             })()}
             <div className="flex items-center gap-2 justify-end mt-1">
               <button
@@ -113,7 +102,7 @@ export function TokenBalances() {
                 className="text-xs text-blue-600 hover:text-blue-800"
                 disabled={isDecrypting}
               >
-                {isRevealed ? '隐藏' : '解密'}
+                解密
               </button>
               <button
                 onClick={() => refetchCUSDT()}

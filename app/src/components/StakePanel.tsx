@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useAccount, useBalance, useContractRead } from 'wagmi'
+import { useAccount, useBalance, useReadContract } from 'wagmi'
 import { ethers } from 'ethers'
 import { useFHEVM } from '../hooks/useFHEVM'
 import { CONTRACT_ADDRESSES } from '../config/fhevm'
@@ -10,17 +10,30 @@ export function StakePanel() {
   const { address, isConnected } = useAccount()
   const [stakeAmount, setStakeAmount] = useState('')
   const [isStaking, setIsStaking] = useState(false)
-  const { instance, initializeInstance } = useFHEVM()
+  const { instance, initializeInstance, decryptEuint64 } = useFHEVM()
+  const [isDecrypting, setIsDecrypting] = useState(false)
+  const [decryptedCUSDT, setDecryptedCUSDT] = useState<bigint | null>(null)
 
   // Balances
   const { data: ethBalance } = useBalance({ address })
-  const { data: encryptedCUSDT, refetch: refetchCUSDT } = useContractRead({
+  const { data: encryptedCUSDT, refetch: refetchCUSDT } = useReadContract({
     address: CONTRACT_ADDRESSES.CUSDT as `0x${string}`,
     abi: CUSDT_ABI as any,
     functionName: 'confidentialBalanceOf',
     args: address ? [address] : undefined,
-    enabled: !!address,
-  })
+    query: { enabled: !!address },
+  }) as any
+
+  const handleDecrypt = async () => {
+    if (!encryptedCUSDT) return
+    setIsDecrypting(true)
+    try {
+      const val = await decryptEuint64(CONTRACT_ADDRESSES.CUSDT, encryptedCUSDT as string)
+      setDecryptedCUSDT(val)
+    } finally {
+      setIsDecrypting(false)
+    }
+  }
 
   const handleStake = async () => {
     if (!isConnected || !stakeAmount) return
@@ -113,20 +126,26 @@ export function StakePanel() {
               if (!enc || enc.toLowerCase() === zeroHash) {
                 return <span className="font-mono text-sm text-gray-700">0</span>
               }
-              return (
-                <>
-                  <span className="font-mono text-xs text-gray-500">Encrypted:</span>
-                  <div className="text-[10px] text-gray-500 max-w-[220px] break-all">{enc}</div>
-                </>
-              )
+              if (decryptedCUSDT == null) return <span className="font-mono text-sm text-gray-700">***</span>
+              const human = Number(decryptedCUSDT) / 1e6
+              return <span className="font-mono text-sm text-gray-900">{human.toLocaleString(undefined, { maximumFractionDigits: 6 })}</span>
             })()}
-            <button
-              onClick={() => refetchCUSDT()}
-              className="ml-2 text-xs text-blue-600 hover:text-blue-800"
-              title="Refresh balance"
-            >
-              ↻
-            </button>
+            <div className="flex items-center gap-2 justify-end mt-1">
+              <button
+                onClick={handleDecrypt}
+                className="text-xs text-blue-600 hover:text-blue-800"
+                disabled={isDecrypting}
+              >
+                解密
+              </button>
+              <button
+                onClick={() => refetchCUSDT()}
+                className="text-xs text-blue-600 hover:text-blue-800"
+                title="Refresh balance"
+              >
+                ↻
+              </button>
+            </div>
           </div>
         </div>
       </div>
