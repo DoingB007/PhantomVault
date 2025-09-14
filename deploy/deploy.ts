@@ -46,15 +46,6 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   console.log("Current CSecretStakeCoin owner:", owner);
   console.log("Staking platform address:", secretStakePlatform.address);
 
-  if (owner.toLowerCase() !== secretStakePlatform.address.toLowerCase()) {
-    console.log("Transferring CSecretStakeCoin ownership to staking platform...");
-    const transferOwnershipTx = await cSecretStakeCoinContract.transferOwnership(secretStakePlatform.address);
-    await transferOwnershipTx.wait();
-    console.log("✅ Ownership transferred");
-  } else {
-    console.log("✅ Ownership already transferred to staking platform");
-  }
-
   // Give some USDT to deployer for testing (already done in constructor, but let's verify)
 
   console.log("\n🎉 All contracts deployed successfully!");
@@ -69,5 +60,6 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   console.log("3. Stake cUSDT in the SecretStakePlatform to earn cSSC rewards");
 };
 export default func;
-func.id = "deploy_fheCounter"; // id required to prevent reexecution
-func.tags = ["FHECounter"];
+// Use stable id and tag names matching actual contracts
+func.id = "deploy_secret_stake_platform"; // id required to prevent reexecution
+func.tags = ["SecretStakePlatform"];

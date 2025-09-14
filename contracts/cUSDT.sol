@@ -9,8 +9,8 @@ import {FHE, euint64, externalEuint64} from "@fhevm/solidity/lib/FHE.sol";
 contract cUSDT is ConfidentialFungibleToken, SepoliaConfig {
     constructor() ConfidentialFungibleToken("cUSDT", "cUSDT", "") {}
 
-    function mint(uint256 amount) external {
-        euint64 encryptedAmount = euint64.wrap(bytes32(amount));
+    function mint(uint64 amount) external {
+        euint64 encryptedAmount = FHE.asEuint64(amount);
         _mint(msg.sender, encryptedAmount);
     }
 }

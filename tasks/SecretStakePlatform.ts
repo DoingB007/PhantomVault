@@ -91,6 +91,48 @@ task("task:get-staked-amount", "Gets the user's staked amount")
 
 /**
  * Example:
+ *   - npx hardhat --network localhost task:get-cusdt-balance
+ *   - npx hardhat --network sepolia task:get-cusdt-balance --user 0x...
+ */
+task("task:get-cusdt-balance", "Decrypt and show user's cUSDT balance")
+  .addOptionalParam("user", "Optionally specify the user address (defaults to first signer)")
+  .addOptionalParam("token", "Optionally specify the cUSDT contract address")
+  .setAction(async function (taskArguments: TaskArguments, hre) {
+    const { ethers, deployments, fhevm } = hre;
+
+    await fhevm.initializeCLIApi();
+
+    const cUSDTDeployment = taskArguments.token
+      ? { address: taskArguments.token }
+      : await deployments.get("cUSDT");
+    const cusdt = await ethers.getContractAt("cUSDT", cUSDTDeployment.address);
+
+    const signers = await ethers.getSigners();
+    const userAddress = taskArguments.user || signers[0].address;
+
+    console.log(`cUSDT: ${cUSDTDeployment.address}`);
+    console.log(`User : ${userAddress}`);
+
+    const encryptedBalance = await cusdt.confidentialBalanceOf(userAddress);
+    if (encryptedBalance === ethers.ZeroHash) {
+      console.log(`Encrypted balance: ${encryptedBalance}`);
+      console.log("Clear balance    : 0");
+      return;
+    }
+
+    const clearBalance = await fhevm.userDecryptEuint(
+      FhevmType.euint64,
+      encryptedBalance,
+      cUSDTDeployment.address,
+      signers[0],
+    );
+
+    console.log(`Encrypted balance: ${encryptedBalance}`);
+    console.log(`Clear balance    : ${clearBalance}`);
+  });
+
+/**
+ * Example:
  *   - npx hardhat --network localhost task:get-pending-rewards
  *   - npx hardhat --network sepolia task:get-pending-rewards
  */
@@ -181,6 +223,18 @@ task("task:approve", "Approve contract as operator")
     console.log("Transaction:", approveTx.hash);
   });
 
+// Debug: check operator status
+task("task:check-operator", "Check if platform is operator for signer on cUSDT")
+  .setAction(async function (_args: TaskArguments, hre) {
+    const { ethers, deployments } = hre;
+    const SecretStakePlatformDeployment = await deployments.get("SecretStakePlatform");
+    const cUSDTDepolyment = await deployments.get("cUSDT");
+    const cusdt = await ethers.getContractAt("cUSDT", cUSDTDepolyment.address);
+    const [signer] = await ethers.getSigners();
+    const isOp = await cusdt.isOperator(signer.address, SecretStakePlatformDeployment.address);
+    console.log(`Holder ${signer.address} -> platform ${SecretStakePlatformDeployment.address} operator? ${isOp}`);
+  });
+
 /**
  * Example:
  *   - npx hardhat --network localhost task:stake --amount 1000
@@ -188,16 +242,17 @@ task("task:approve", "Approve contract as operator")
  */
 task("task:stake", "Stakes cUSDT tokens to the platform")
   .addOptionalParam("address", "Optionally specify the SecretStakePlatform contract address")
-  .addParam("amount", "The amount to stake (in standard units, will be converted to wei internally)")
+  .addParam("amount", "Amount to stake (standard units; 6 decimals internally)")
+  .addOptionalParam("gas", "Custom gas limit (default: 12000000)", "12000000")
   .setAction(async function (taskArguments: TaskArguments, hre) {
     const { ethers, deployments, fhevm } = hre;
 
-    const inputAmount = BigInt(taskArguments.amount);
-    if (inputAmount <= 0n) {
-      throw new Error(`Amount must be greater than 0`);
-    }
+    // const inputAmount = BigInt(taskArguments.amount);
+    // if (inputAmount <= 0n) {
+    //   throw new Error(`Amount must be greater than 0`);
+    // }
 
-    const amount = inputAmount * BigInt(10 ** 6); // Convert to wei
+    const amount = parseInt(taskArguments.amount) * 10 ** 6; // Convert to smallest unit (6 decimals)
 
     await fhevm.initializeCLIApi();
 
@@ -210,21 +265,22 @@ task("task:stake", "Stakes cUSDT tokens to the platform")
 
     const platformContract = await ethers.getContractAt("SecretStakePlatform", SecretStakePlatformDeployment.address);
 
-    // Encrypt the amount
-    const encryptedAmount = await fhevm
+    // 仅为平台合约加密一次（平台 fromExternal 后用 allowTransient 调用 cUSDT）
+    const encForPlatform = await fhevm
       .createEncryptedInput(SecretStakePlatformDeployment.address, signers[0].address)
       .add64(amount)
       .encrypt();
 
+    const gasLimit = BigInt("30000000");
     const tx = await platformContract
       .connect(signers[0])
-      .stake(encryptedAmount.handles[0], encryptedAmount.inputProof);
+      .stake(encForPlatform.handles[0], encForPlatform.inputProof, { gasLimit });
     console.log(`Wait for tx:${tx.hash}...`);
 
     const receipt = await tx.wait();
     console.log(`tx:${tx.hash} status=${receipt?.status}`);
 
-    console.log(`Stake of ${inputAmount.toString()} tokens (${amount.toString()} wei) succeeded!`);
+    console.log(`Stake of ${amount / 10 ** 6} tokens(${amount.toString()} base units) succeeded!`);
   });
 
 /**
@@ -234,7 +290,8 @@ task("task:stake", "Stakes cUSDT tokens to the platform")
  */
 task("task:withdraw", "Withdraws staked tokens from the platform")
   .addOptionalParam("address", "Optionally specify the SecretStakePlatform contract address")
-  .addParam("amount", "The amount to withdraw (in standard units, will be converted to wei internally)")
+  .addParam("amount", "Amount to withdraw (standard units; 6 decimals internally)")
+  .addOptionalParam("gas", "Custom gas limit (default: 12000000)", "12000000")
   .setAction(async function (taskArguments: TaskArguments, hre) {
     const { ethers, deployments, fhevm } = hre;
 
@@ -243,7 +300,7 @@ task("task:withdraw", "Withdraws staked tokens from the platform")
       throw new Error(`Amount must be greater than 0`);
     }
 
-    const amount = inputAmount * BigInt(10 ** 18); // Convert to wei
+    const amount = inputAmount * BigInt(10 ** 6); // Convert to smallest unit (6 decimals)
 
     await fhevm.initializeCLIApi();
 
@@ -262,15 +319,16 @@ task("task:withdraw", "Withdraws staked tokens from the platform")
       .add64(amount)
       .encrypt();
 
+    const gasLimit = BigInt(taskArguments.gas || "12000000");
     const tx = await platformContract
       .connect(signers[0])
-      .withdraw(encryptedAmount.handles[0], encryptedAmount.inputProof);
+      .withdraw(encryptedAmount.handles[0], encryptedAmount.inputProof, { gasLimit });
     console.log(`Wait for tx:${tx.hash}...`);
 
     const receipt = await tx.wait();
-    console.log(`tx:${tx.hash} status=${receipt?.status}`);
+    console.log(`tx:${tx.hash} status = ${receipt?.status} `);
 
-    console.log(`Withdraw of ${inputAmount.toString()} tokens (${amount.toString()} wei) succeeded!`);
+    console.log(`Withdraw of ${inputAmount.toString()} tokens(${amount.toString()} base units) succeeded!`);
   });
 
 /**
@@ -281,12 +339,14 @@ task("task:withdraw", "Withdraws staked tokens from the platform")
 task("task:claim-rewards", "Claims pending rewards from the platform")
   .addOptionalParam("address", "Optionally specify the SecretStakePlatform contract address")
   .setAction(async function (taskArguments: TaskArguments, hre) {
-    const { ethers, deployments } = hre;
+    const { ethers, deployments, fhevm } = hre;
+
+    await fhevm.initializeCLIApi();
 
     const SecretStakePlatformDeployment = taskArguments.address
       ? { address: taskArguments.address }
       : await deployments.get("SecretStakePlatform");
-    console.log(`SecretStakePlatform: ${SecretStakePlatformDeployment.address}`);
+    console.log(`SecretStakePlatform: ${SecretStakePlatformDeployment.address} `);
 
     const signers = await ethers.getSigners();
 
@@ -296,9 +356,52 @@ task("task:claim-rewards", "Claims pending rewards from the platform")
     console.log(`Wait for tx:${tx.hash}...`);
 
     const receipt = await tx.wait();
-    console.log(`tx:${tx.hash} status=${receipt?.status}`);
+    console.log(`tx:${tx.hash} status = ${receipt?.status} `);
 
     console.log(`Claim rewards succeeded!`);
+  });
+
+// 本地调试：明文质押（不转移代币）
+task("task:stake-plain", "Stake by plaintext amount (testing only)")
+  .addOptionalParam("address", "Optionally specify the SecretStakePlatform contract address")
+  .addParam("amount", "Amount to stake (standard units; 6 decimals internally)")
+  .setAction(async function (taskArguments: TaskArguments, hre) {
+    const { ethers, deployments, fhevm } = hre;
+
+    await fhevm.initializeCLIApi();
+
+    const inputAmount = BigInt(taskArguments.amount);
+    if (inputAmount <= 0n) {
+      throw new Error(`Amount must be greater than 0`);
+    }
+
+    const amount = inputAmount * BigInt(10 ** 6); // 6 decimals
+
+    const SecretStakePlatformDeployment = taskArguments.address
+      ? { address: taskArguments.address }
+      : await deployments.get("SecretStakePlatform");
+    console.log(`SecretStakePlatform: ${SecretStakePlatformDeployment.address} `);
+
+    const [signer] = await ethers.getSigners();
+    const platformContract = await ethers.getContractAt("SecretStakePlatform", SecretStakePlatformDeployment.address);
+
+    const tx = await platformContract.connect(signer).stakePlain(amount);
+    console.log(`Wait for tx:${tx.hash}...`);
+    const receipt = await tx.wait();
+    console.log(`tx:${tx.hash} status = ${receipt?.status} `);
+    console.log(`StakePlain of ${inputAmount.toString()} tokens(${amount.toString()} base units) succeeded!`);
+  });
+
+// 本地调试：快进 N 天
+task("task:fast-forward-days", "Increase evm time for localhost")
+  .addParam("days", "Days to fast forward", "1")
+  .setAction(async function (taskArguments: TaskArguments, hre) {
+    const days = parseInt(taskArguments.days);
+    if (!Number.isInteger(days) || days <= 0) throw new Error("days must be positive integer");
+    const seconds = days * 24 * 60 * 60;
+    await hre.ethers.provider.send("evm_increaseTime", [seconds]);
+    await hre.ethers.provider.send("evm_mine", []);
+    console.log(`Time advanced by ${days} day(s).`);
   });
 
 /**
@@ -314,7 +417,7 @@ task("task:update-pool", "Updates the reward pool")
     const SecretStakePlatformDeployment = taskArguments.address
       ? { address: taskArguments.address }
       : await deployments.get("SecretStakePlatform");
-    console.log(`SecretStakePlatform: ${SecretStakePlatformDeployment.address}`);
+    console.log(`SecretStakePlatform: ${SecretStakePlatformDeployment.address} `);
 
     const signers = await ethers.getSigners();
 
@@ -324,7 +427,7 @@ task("task:update-pool", "Updates the reward pool")
     console.log(`Wait for tx:${tx.hash}...`);
 
     const receipt = await tx.wait();
-    console.log(`tx:${tx.hash} status=${receipt?.status}`);
+    console.log(`tx:${tx.hash} status = ${receipt?.status} `);
 
     console.log(`Update pool succeeded!`);
   });
@@ -345,7 +448,7 @@ task("task:get-last-error", "Gets the last error for a user")
     const SecretStakePlatformDeployment = taskArguments.address
       ? { address: taskArguments.address }
       : await deployments.get("SecretStakePlatform");
-    console.log(`SecretStakePlatform: ${SecretStakePlatformDeployment.address}`);
+    console.log(`SecretStakePlatform: ${SecretStakePlatformDeployment.address} `);
 
     const signers = await ethers.getSigners();
     const userAddress = taskArguments.user || signers[0].address;
@@ -355,9 +458,9 @@ task("task:get-last-error", "Gets the last error for a user")
     const [encryptedError, timestamp] = await platformContract.getLastError(userAddress);
 
     if (encryptedError === ethers.ZeroHash) {
-      console.log(`Encrypted error: ${encryptedError}`);
+      console.log(`Encrypted error: ${encryptedError} `);
       console.log("Clear error code: 0");
-      console.log(`Timestamp: ${timestamp}`);
+      console.log(`Timestamp: ${timestamp} `);
       return;
     }
 
@@ -368,15 +471,15 @@ task("task:get-last-error", "Gets the last error for a user")
       signers[0],
     );
 
-    console.log(`Encrypted error: ${encryptedError}`);
-    console.log(`Clear error code: ${clearError}`);
-    console.log(`Timestamp: ${timestamp}`);
+    console.log(`Encrypted error: ${encryptedError} `);
+    console.log(`Clear error code: ${clearError} `);
+    console.log(`Timestamp: ${timestamp} `);
 
     // Decode error meaning
     const errorMeaning = clearError === 0n ? "NO_ERROR" :
       clearError === 1n ? "INSUFFICIENT_BALANCE" :
         clearError === 2n ? "INVALID_AMOUNT" : "UNKNOWN_ERROR";
-    console.log(`Error meaning: ${errorMeaning}`);
+    console.log(`Error meaning: ${errorMeaning} `);
   });
 
 /**
@@ -395,40 +498,40 @@ task("task:get-user-info", "Gets comprehensive user information")
     const SecretStakePlatformDeployment = taskArguments.address
       ? { address: taskArguments.address }
       : await deployments.get("SecretStakePlatform");
-    console.log(`SecretStakePlatform: ${SecretStakePlatformDeployment.address}`);
+    console.log(`SecretStakePlatform: ${SecretStakePlatformDeployment.address} `);
 
     const signers = await ethers.getSigners();
     const userAddress = taskArguments.user || signers[0].address;
 
     const platformContract = await ethers.getContractAt("SecretStakePlatform", SecretStakePlatformDeployment.address);
 
-    console.log(`\n=== User Information for ${userAddress} ===`);
+    console.log(`\n === User Information for ${userAddress} === `);
 
     // Get staked amount
     const encryptedStakedAmount = await platformContract.getUserStakedAmount(userAddress);
     const clearStakedAmount = encryptedStakedAmount === ethers.ZeroHash ? 0n :
       await fhevm.userDecryptEuint(FhevmType.euint64, encryptedStakedAmount, SecretStakePlatformDeployment.address, signers[0]);
-    console.log(`Staked Amount: ${clearStakedAmount.toString()}`);
+    console.log(`Staked Amount: ${clearStakedAmount.toString()} `);
 
     // Get reward debt
     const encryptedRewardDebt = await platformContract.getUserRewardDebt(userAddress);
     const clearRewardDebt = encryptedRewardDebt === ethers.ZeroHash ? 0n :
       await fhevm.userDecryptEuint(FhevmType.euint64, encryptedRewardDebt, SecretStakePlatformDeployment.address, signers[0]);
-    console.log(`Reward Debt: ${clearRewardDebt.toString()}`);
+    console.log(`Reward Debt: ${clearRewardDebt.toString()} `);
 
     // Get pending rewards
     const encryptedPendingRewards = await platformContract.pendingRewards(userAddress);
     const clearPendingRewards = encryptedPendingRewards === ethers.ZeroHash ? 0n :
       await fhevm.userDecryptEuint(FhevmType.euint64, encryptedPendingRewards, SecretStakePlatformDeployment.address, signers[0]);
-    console.log(`Pending Rewards: ${clearPendingRewards.toString()}`);
+    console.log(`Pending Rewards: ${clearPendingRewards.toString()} `);
 
     // Get user info struct
     const userInfo = await platformContract.userInfo(userAddress);
-    console.log(`Last Stake Block: ${userInfo.lastStakeBlock}`);
+    console.log(`Last Stake Block: ${userInfo.lastStakeBlock} `);
 
     // Get stake count
     const stakeCount = await platformContract.userStakeCount(userAddress);
-    console.log(`Stake Count: ${stakeCount}`);
+    console.log(`Stake Count: ${stakeCount} `);
 
     // Get last error
     const [encryptedError, timestamp] = await platformContract.getLastError(userAddress);
@@ -437,7 +540,7 @@ task("task:get-user-info", "Gets comprehensive user information")
     const errorMeaning = clearError === 0n ? "NO_ERROR" :
       clearError === 1n ? "INSUFFICIENT_BALANCE" :
         clearError === 2n ? "INVALID_AMOUNT" : "UNKNOWN_ERROR";
-    console.log(`Last Error: ${errorMeaning} (${clearError}) at ${timestamp}`);
+    console.log(`Last Error: ${errorMeaning} (${clearError}) at ${timestamp} `);
 
     console.log(`================================\n`);
   });
@@ -457,48 +560,65 @@ task("task:platform-info", "Gets comprehensive platform information")
     const SecretStakePlatformDeployment = taskArguments.address
       ? { address: taskArguments.address }
       : await deployments.get("SecretStakePlatform");
-    console.log(`SecretStakePlatform: ${SecretStakePlatformDeployment.address}`);
+    console.log(`SecretStakePlatform: ${SecretStakePlatformDeployment.address} `);
 
     const signers = await ethers.getSigners();
 
     const platformContract = await ethers.getContractAt("SecretStakePlatform", SecretStakePlatformDeployment.address);
 
-    console.log(`\n=== Platform Information ===`);
+    console.log(`\n === Platform Information === `);
 
-    // Get total staked
+    // 平台级字段为机密数据：仅打印密文句柄，不尝试解密
     const encryptedTotalStaked = await platformContract.getTotalStaked();
-    const clearTotalStaked = encryptedTotalStaked === ethers.ZeroHash ? 0n :
-      await fhevm.userDecryptEuint(FhevmType.euint64, encryptedTotalStaked, SecretStakePlatformDeployment.address, signers[0]);
-    console.log(`Total Staked: ${clearTotalStaked.toString()}`);
+    console.log(`Encrypted Total Staked: ${encryptedTotalStaked} `);
 
-    // Get accumulated reward per share
-    const encryptedAccRewardPerShare = await platformContract.getAccRewardPerShare();
-    const clearAccRewardPerShare = encryptedAccRewardPerShare === ethers.ZeroHash ? 0n :
-      await fhevm.userDecryptEuint(FhevmType.euint64, encryptedAccRewardPerShare, SecretStakePlatformDeployment.address, signers[0]);
-    console.log(`Accumulated Reward Per Share: ${clearAccRewardPerShare.toString()}`);
+    // 累计奖励指标接口已移除（固定利息模型），不再输出
 
-    // Get reward per block
-    const rewardPerBlock = await platformContract.REWARD_PER_BLOCK();
-    console.log(`Reward Per Block: ${rewardPerBlock.toString()}`);
+    // Fixed daily reward model
+    const UNIT = await platformContract.UNIT();
+    const REWARD_PER_UNIT_PER_DAY = await platformContract.REWARD_PER_UNIT_PER_DAY();
+    console.log(`Unit(10k USDT in base units): ${UNIT.toString()} `);
+    console.log(`Reward Per Unit Per Day: ${REWARD_PER_UNIT_PER_DAY.toString()} `);
 
     // Get last reward block
     const lastRewardBlock = await platformContract.lastRewardBlock();
-    console.log(`Last Reward Block: ${lastRewardBlock}`);
+    console.log(`Last Reward Block: ${lastRewardBlock} `);
 
     // Get current block
     const currentBlock = await ethers.provider.getBlockNumber();
-    console.log(`Current Block: ${currentBlock}`);
+    console.log(`Current Block: ${currentBlock} `);
 
-    // Calculate blocks since last reward
-    const blocksSinceLastReward = currentBlock - Number(lastRewardBlock);
-    console.log(`Blocks Since Last Reward: ${blocksSinceLastReward}`);
+    // Last reward block retained for compatibility only
 
     // Get token addresses
     const stakingTokenAddress = await platformContract.stakingToken();
     const rewardTokenAddress = await platformContract.rewardToken();
 
-    console.log(`Staking Token (cUSDT): ${stakingTokenAddress}`);
-    console.log(`Reward Token (cSSC): ${rewardTokenAddress}`);
+    console.log(`Staking Token(cUSDT): ${stakingTokenAddress} `);
+    console.log(`Reward Token(cSSC): ${rewardTokenAddress} `);
 
     console.log(`==========================\n`);
+  });
+
+/**
+ * Example:
+ *   - npx hardhat --network localhost task:mint-cusdt --amount 10000
+ *   - npx hardhat --network sepolia task:mint-cusdt --amount 10000
+ */
+task("task:mint-cusdt", "Mint cUSDT tokens for testing")
+  .addParam("amount", "Amount to mint", "10000")
+  .setAction(async function (taskArguments: TaskArguments, hre) {
+    const { ethers, deployments, fhevm } = hre;
+    await fhevm.initializeCLIApi();
+
+    const cUSDTDeployment = await deployments.get("cUSDT");
+    const cUSDT = await ethers.getContractAt("cUSDT", cUSDTDeployment.address);
+
+    // ConfidentialToken uses 6 decimals, not 18
+    const amount = parseInt(taskArguments.amount) * 10 ** 6;
+    const tx = await cUSDT.mint(amount);
+    await tx.wait();
+
+    console.log(`Successfully minted ${taskArguments.amount} cUSDT tokens`);
+    console.log(`Transaction: ${tx.hash} `);
   });
