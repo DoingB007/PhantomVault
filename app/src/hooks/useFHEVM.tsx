@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
 import type { FhevmInstance } from '@zama-fhe/relayer-sdk/bundle'
 import { useAccount, useWalletClient } from 'wagmi'
-import { initFhevm } from '../config/fhevm'
+import { initFhevm } from '../config'
 
 interface FHEVMContextType {
   instance: FhevmInstance | null

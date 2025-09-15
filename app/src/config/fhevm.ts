@@ -23,10 +23,5 @@ export const initFhevm = async () => {
 
 }
 
-// Contract addresses - update these with your deployed contract addresses
-export const CONTRACT_ADDRESSES = {
-  // Updated with new deployment that supports proportional rewards for small stakes
-  SECRET_STAKE_PLATFORM: '0xf24beca3751e14196F9AB36b5FD52e9A3d9C7449',
-  CUSDT: '0x5a4181ed6afd6E77154AB8B18EB8fF70438456EE',
-  CSSC: '0x6F8F8915053378764CeCfE58BBCbAf1EdC626C38',
-} as const
+// FHEVM instance initialization
+// This file handles FHEVM initialization for the Sepolia testnet

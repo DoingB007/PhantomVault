@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useAccount, useWriteContract } from 'wagmi'
 import CUSDT_ABI from '../abis/cUSDT.json'
-import { CONTRACT_ADDRESSES } from '../config/fhevm'
+import { CONTRACT_ADDRESSES } from '../config'
 
 export function USDTFaucet() {
   const { address, isConnected } = useAccount()

@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useAccount, useReadContract, useBalance } from 'wagmi'
 import { formatEther } from 'viem'
 import { useFHEVM } from '../hooks/useFHEVM'
-import { CONTRACT_ADDRESSES } from '../config/fhevm'
+import { CONTRACT_ADDRESSES } from '../config'
 import CUSDT_ABI from '../abis/cUSDT.json'
 
 const CUSDT_ADDRESS = CONTRACT_ADDRESSES.CUSDT

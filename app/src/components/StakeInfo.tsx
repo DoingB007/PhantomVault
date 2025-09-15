@@ -1,6 +1,6 @@
 import { useAccount, useReadContract } from 'wagmi'
 import { ethers } from 'ethers'
-import { CONTRACT_ADDRESSES } from '../config/fhevm'
+import { CONTRACT_ADDRESSES } from '../config'
 import PLATFORM_ABI from '../abis/SecretStakePlatform.json'
 import { useState, useEffect } from 'react'
 import { useFHEVM } from '../hooks/useFHEVM'

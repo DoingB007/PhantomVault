@@ -2,50 +2,7 @@ import { useState } from 'react'
 import { useAccount, useWriteContract, useReadContract } from 'wagmi'
 import { parseEther, formatEther } from 'viem'
 import { useFHEVM } from '../hooks/useFHEVM'
-
-const MOCK_USDT_ADDRESS = '0x5FbDB2315678afecb367f032d93F642f64180aa3'
-const CUSDT_ADDRESS = '0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512'
-
-const USDT_ABI = [
-  {
-    inputs: [{ internalType: 'address', name: 'spender', type: 'address' }, { internalType: 'uint256', name: 'value', type: 'uint256' }],
-    name: 'approve',
-    outputs: [{ internalType: 'bool', name: '', type: 'bool' }],
-    stateMutability: 'nonpayable',
-    type: 'function'
-  },
-  {
-    inputs: [{ internalType: 'address', name: 'account', type: 'address' }],
-    name: 'balanceOf',
-    outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
-    stateMutability: 'view',
-    type: 'function'
-  },
-  {
-    inputs: [{ internalType: 'address', name: 'owner', type: 'address' }, { internalType: 'address', name: 'spender', type: 'address' }],
-    name: 'allowance',
-    outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
-    stateMutability: 'view',
-    type: 'function'
-  }
-] as const
-
-const CUSDT_ABI = [
-  {
-    inputs: [{ internalType: 'uint256', name: 'amount', type: 'uint256' }],
-    name: 'wrap',
-    outputs: [],
-    stateMutability: 'nonpayable',
-    type: 'function'
-  },
-  {
-    inputs: [{ internalType: 'euint64', name: 'amount', type: 'uint256' }, { internalType: 'bytes', name: 'inputProof', type: 'bytes' }],
-    name: 'unwrap',
-    outputs: [],
-    stateMutability: 'nonpayable',
-    type: 'function'
-  }
-] as const
+import { CONTRACT_ADDRESSES, COMMON_ABIS } from '../config'
 
 export function USDTWrapper() {
   const { address, isConnected } = useAccount()
@@ -58,8 +15,8 @@ export function USDTWrapper() {
 
   // Read USDT balance
   const { data: usdtBalance, refetch: refetchUSDT } = useReadContract({
-    address: MOCK_USDT_ADDRESS,
-    abi: USDT_ABI,
+    address: CONTRACT_ADDRESSES.MOCK_USDT as `0x${string}`,
+    abi: COMMON_ABIS.ERC20,
     functionName: 'balanceOf',
     args: address ? [address] : undefined,
     query: { enabled: !!address },
@@ -67,10 +24,10 @@ export function USDTWrapper() {
 
   // Read USDT allowance for cUSDT contract
   const { data: allowance, refetch: refetchAllowance } = useReadContract({
-    address: MOCK_USDT_ADDRESS,
-    abi: USDT_ABI,
+    address: CONTRACT_ADDRESSES.MOCK_USDT as `0x${string}`,
+    abi: COMMON_ABIS.ERC20,
     functionName: 'allowance',
-    args: address ? [address, CUSDT_ADDRESS] : undefined,
+    args: address ? [address, CONTRACT_ADDRESSES.CUSDT] : undefined,
     query: { enabled: !!address },
   }) as any
 
@@ -84,17 +41,17 @@ export function USDTWrapper() {
     try {
       const amount = parseEther(wrapAmount)
       const tx = await writeContractAsync({
-        address: MOCK_USDT_ADDRESS,
-        abi: USDT_ABI,
+        address: CONTRACT_ADDRESSES.MOCK_USDT as `0x${string}`,
+        abi: COMMON_ABIS.ERC20,
         functionName: 'approve',
-        args: [CUSDT_ADDRESS, amount],
+        args: [CONTRACT_ADDRESSES.CUSDT, amount],
       })
       console.log('Approval transaction:', tx)
-      
+
       setTimeout(() => {
         refetchAllowance()
       }, 2000)
-      
+
     } catch (error) {
       console.error('Approval failed:', error)
     } finally {
@@ -109,18 +66,18 @@ export function USDTWrapper() {
     try {
       const amount = parseEther(wrapAmount)
       const tx = await writeContractAsync({
-        address: CUSDT_ADDRESS,
-        abi: CUSDT_ABI,
+        address: CONTRACT_ADDRESSES.CUSDT as `0x${string}`,
+        abi: COMMON_ABIS.WRAPPER,
         functionName: 'wrap',
         args: [amount],
       })
       console.log('Wrap transaction:', tx)
-      
+
       setTimeout(() => {
         refetchUSDT()
         setWrapAmount('')
       }, 2000)
-      
+
     } catch (error) {
       console.error('Wrap failed:', error)
     } finally {
@@ -134,23 +91,23 @@ export function USDTWrapper() {
     setIsUnwrapping(true)
     try {
       // Create encrypted input for the unwrap amount
-      const input = fhevmInstance.createEncryptedInput(CUSDT_ADDRESS, address)
+      const input = fhevmInstance.createEncryptedInput(CONTRACT_ADDRESSES.CUSDT, address)
       input.add64(BigInt(parseEther(unwrapAmount).toString()))
       const encryptedInput = await input.encrypt()
-      
+
       const tx = await writeContractAsync({
-        address: CUSDT_ADDRESS,
-        abi: CUSDT_ABI,
+        address: CONTRACT_ADDRESSES.CUSDT as `0x${string}`,
+        abi: COMMON_ABIS.WRAPPER,
         functionName: 'unwrap',
         args: [BigInt(encryptedInput.handles[0] as unknown as string), encryptedInput.inputProof as unknown as `0x${string}`],
       })
       console.log('Unwrap transaction:', tx)
-      
+
       setTimeout(() => {
         refetchUSDT()
         setUnwrapAmount('')
       }, 2000)
-      
+
     } catch (error) {
       console.error('Unwrap failed:', error)
     } finally {
