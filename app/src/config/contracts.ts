@@ -37,11 +37,6 @@ export const CONTRACT_INFO = {
     description: 'Encrypted reward token',
     deploymentBlock: 0,
   },
-  MOCK_USDT: {
-    name: 'Mock USDT',
-    description: 'Test USDT token for development',
-    deploymentBlock: 0,
-  },
 } as const
 
 // Type definitions for better TypeScript support
