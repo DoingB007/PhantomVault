@@ -46,6 +46,12 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   console.log("Current CSecretStakeCoin owner:", owner);
   console.log("Staking platform address:", secretStakePlatform.address);
 
+  // Mint reward tokens to the staking platform for distribution
+  console.log("Minting reward tokens to staking platform...");
+  const rewardSupply = 1000000n * 1000000n; // 1,000,000 cSSC (6 decimals)
+  await cSecretStakeCoinContract.mintPlain(secretStakePlatform.address, rewardSupply);
+  console.log(`Minted ${rewardSupply.toString()} cSSC to staking platform`);
+
   // Give some USDT to deployer for testing (already done in constructor, but let's verify)
 
   console.log("\n🎉 All contracts deployed successfully!");
