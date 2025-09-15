@@ -37,7 +37,7 @@ export function USDTFaucet() {
       disabled={!isConnected || !address || isClaiming}
       className="btn btn-primary btn-full"
     >
-      {isClaiming ? 'Minting 1,000 cUSDT...' : 'Mint 1,000 cUSDT'}
+      {isClaiming ? 'Minting 1,000 cUSDT...' : 'cUSDT Faucet'}
     </button>
   )
 }
