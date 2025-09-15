@@ -213,7 +213,7 @@ contract SecretStakePlatform is SepoliaConfig, Ownable, ReentrancyGuard {
 
         UserInfo storage user = userInfo[msg.sender];
 
-        // 计算经过的天数（按自然日，不足一天不计）
+        // 按秒精确计算奖励（不再要求满1天）
         uint256 last = user.lastClaimTime;
         if (last == 0) {
             user.lastClaimTime = block.timestamp;
@@ -221,26 +221,32 @@ contract SecretStakePlatform is SepoliaConfig, Ownable, ReentrancyGuard {
             return;
         }
         uint256 elapsed = block.timestamp - last;
-        uint64 daysElapsed = uint64(elapsed / DAY_SECS);
 
-        // daysElapsed == 0 时不发放
-        if (daysElapsed == 0) {
+        // 如果刚刚领取过，不重复发放
+        if (elapsed == 0) {
             emit RewardClaimed(msg.sender, block.number);
             return;
         }
 
-        // stakeUnits = floor(stakedAmount / UNIT)
-        euint64 stakeUnits = FHE.div(user.stakedAmount, uint64(UNIT));
-        // pending = stakeUnits * daysElapsed * REWARD_PER_UNIT_PER_DAY
-        euint64 pending = FHE.mul(stakeUnits, daysElapsed);
+        // 修改为按比例计算，避免小额质押获得0奖励
+        // pending = stakedAmount * elapsed * REWARD_PER_UNIT_PER_DAY / (UNIT * DAY_SECS)
+        // 为了避免精度损失，重新组织计算顺序：
+        // pending = (stakedAmount * elapsed * REWARD_PER_UNIT_PER_DAY) / (UNIT * DAY_SECS)
+
+        // 先计算 stakedAmount * elapsed
+        euint64 pending = FHE.mul(user.stakedAmount, uint64(elapsed));
+        // 再乘以每天奖励
         pending = FHE.mul(pending, uint64(REWARD_PER_UNIT_PER_DAY));
+        // 最后除以 (UNIT * DAY_SECS)
+        uint64 divisor = uint64(UNIT * DAY_SECS);
+        pending = FHE.div(pending, divisor);
 
         // 通过机密转账发放奖励（平台作为调用者，需要对密文有使用权限）
         FHE.allowThis(pending);
         rewardToken.confidentialTransfer(msg.sender, pending);
 
-        // 更新结算时间到完整天数边界
-        user.lastClaimTime = last + uint256(daysElapsed) * DAY_SECS;
+        // 更新结算时间为当前时间
+        user.lastClaimTime = block.timestamp;
 
         emit RewardClaimed(msg.sender, block.number);
     }
