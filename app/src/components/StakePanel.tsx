@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useAccount, useBalance, useReadContract } from 'wagmi'
 import { ethers } from 'ethers'
 import { useFHEVM } from '../hooks/useFHEVM'
@@ -15,7 +15,7 @@ export function StakePanel() {
   const [isDecrypting, setIsDecrypting] = useState(false)
   const [decryptedCUSDT, setDecryptedCUSDT] = useState<bigint | null>(null)
   const [decryptedCSSC, setDecryptedCSSC] = useState<bigint | null>(null)
-  const [isCheckingOperator, setIsCheckingOperator] = useState(false)
+  // const [isCheckingOperator, setIsCheckingOperator] = useState(false)
   const [isSettingOperator, setIsSettingOperator] = useState(false)
 
   // Balances

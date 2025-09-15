@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useAccount, useReadContract, useBalance } from 'wagmi'
 import { formatEther } from 'viem'
 import { useFHEVM } from '../hooks/useFHEVM'

@@ -142,7 +142,7 @@ export function USDTWrapper() {
         address: CUSDT_ADDRESS,
         abi: CUSDT_ABI,
         functionName: 'unwrap',
-        args: [encryptedInput.handles[0], encryptedInput.inputProof],
+        args: [BigInt(encryptedInput.handles[0] as unknown as string), encryptedInput.inputProof as unknown as `0x${string}`],
       })
       console.log('Unwrap transaction:', tx)
       
