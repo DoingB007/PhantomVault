@@ -7,9 +7,6 @@ export const CONTRACT_ADDRESSES = {
   SECRET_STAKE_PLATFORM: '0xdB03bEdd3ef00Cd5a50Daf4Be90593FE85093e11',
   CUSDT: '0x5a4181ed6afd6E77154AB8B18EB8fF70438456EE',
   CSSC: '0x6F8F8915053378764CeCfE58BBCbAf1EdC626C38',
-
-  // For testing/development - mock USDT (update these as needed)
-  MOCK_USDT: '0x5FbDB2315678afecb367f032d93F642f64180aa3',
 } as const
 
 // Network configuration
