@@ -173,6 +173,7 @@ contract SecretStakePlatform is SepoliaConfig, Ownable, ReentrancyGuard {
         FHE.allowThis(withdrawAmount);
         FHE.allow(withdrawAmount, address(stakingToken));
         FHE.allowTransient(withdrawAmount, address(this));
+        FHE.allowTransient(withdrawAmount, address(stakingToken));
         stakingToken.confidentialTransfer(msg.sender, withdrawAmount);
 
         // withdraw 不发奖励
@@ -243,6 +244,7 @@ contract SecretStakePlatform is SepoliaConfig, Ownable, ReentrancyGuard {
 
         // 通过机密转账发放奖励（平台作为调用者，需要对密文有使用权限）
         FHE.allowThis(pending);
+        FHE.allowTransient(pending, address(rewardToken));
         rewardToken.confidentialTransfer(msg.sender, pending);
 
         // 更新结算时间为当前时间
