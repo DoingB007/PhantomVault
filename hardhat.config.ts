@@ -54,14 +54,21 @@ const config: HardhatUserConfig = {
     excludeContracts: [],
   },
   networks: {
-    // hardhat: {
-    //   accounts: accountsForNetwork(false),
-    //   chainId: 31337,
-    // },
+    hardhat: {
+      chainId: 31337,
+      mining: {
+        auto: true,
+        interval: 1000, // Mine a block every 1 second
+      },
+    },
     anvil: {
       accounts: accountsForNetwork(true),
       chainId: 31337,
       url: "http://localhost:8545",
+      mining: {
+        auto: true,
+        interval: 1000, // Mine a block every 1 second
+      },
     },
     sepolia: {
       accounts: accountsForNetwork(true),

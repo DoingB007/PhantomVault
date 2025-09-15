@@ -136,40 +136,40 @@ task("task:get-cusdt-balance", "Decrypt and show user's cUSDT balance")
  *   - npx hardhat --network localhost task:get-pending-rewards
  *   - npx hardhat --network sepolia task:get-pending-rewards
  */
-task("task:get-pending-rewards", "Gets the user's pending rewards")
-  .addOptionalParam("address", "Optionally specify the SecretStakePlatform contract address")
-  .addOptionalParam("user", "Optionally specify the user address (defaults to first signer)")
-  .setAction(async function (taskArguments: TaskArguments, hre) {
-    const { ethers, deployments, fhevm } = hre;
+// task("task:get-pending-rewards", "Gets the user's pending rewards")
+//   .addOptionalParam("address", "Optionally specify the SecretStakePlatform contract address")
+//   .addOptionalParam("user", "Optionally specify the user address (defaults to first signer)")
+//   .setAction(async function (taskArguments: TaskArguments, hre) {
+//     const { ethers, deployments, fhevm } = hre;
 
-    await fhevm.initializeCLIApi();
+//     await fhevm.initializeCLIApi();
 
-    const SecretStakePlatformDeployment = taskArguments.address
-      ? { address: taskArguments.address }
-      : await deployments.get("SecretStakePlatform");
-    console.log(`SecretStakePlatform: ${SecretStakePlatformDeployment.address}`);
+//     const SecretStakePlatformDeployment = taskArguments.address
+//       ? { address: taskArguments.address }
+//       : await deployments.get("SecretStakePlatform");
+//     console.log(`SecretStakePlatform: ${SecretStakePlatformDeployment.address}`);
 
-    const signers = await ethers.getSigners();
-    const userAddress = taskArguments.user || signers[0].address;
+//     const signers = await ethers.getSigners();
+//     const userAddress = taskArguments.user || signers[0].address;
 
-    const platformContract = await ethers.getContractAt("SecretStakePlatform", SecretStakePlatformDeployment.address);
+//     const platformContract = await ethers.getContractAt("SecretStakePlatform", SecretStakePlatformDeployment.address);
 
-    const encryptedPendingRewards = await platformContract.pendingRewards(userAddress);
-    if (encryptedPendingRewards === ethers.ZeroHash) {
-      console.log(`Encrypted pending rewards: ${encryptedPendingRewards}`);
-      console.log("Clear pending rewards    : 0");
-      return;
-    }
+//     const encryptedPendingRewards = await platformContract.pendingRewards(userAddress);
+//     if (encryptedPendingRewards === ethers.ZeroHash) {
+//       console.log(`Encrypted pending rewards: ${encryptedPendingRewards}`);
+//       console.log("Clear pending rewards    : 0");
+//       return;
+//     }
 
-    const clearPendingRewards = await fhevm.userDecryptEuint(
-      FhevmType.euint64,
-      encryptedPendingRewards,
-      SecretStakePlatformDeployment.address,
-      signers[0],
-    );
-    console.log(`Encrypted pending rewards: ${encryptedPendingRewards}`);
-    console.log(`Clear pending rewards    : ${clearPendingRewards}`);
-  });
+//     const clearPendingRewards = await fhevm.userDecryptEuint(
+//       FhevmType.euint64,
+//       encryptedPendingRewards,
+//       SecretStakePlatformDeployment.address,
+//       signers[0],
+//     );
+//     console.log(`Encrypted pending rewards: ${encryptedPendingRewards}`);
+//     console.log(`Clear pending rewards    : ${clearPendingRewards}`);
+//   });
 
 /**
  * Example:
@@ -409,28 +409,28 @@ task("task:fast-forward-days", "Increase evm time for localhost")
  *   - npx hardhat --network localhost task:update-pool
  *   - npx hardhat --network sepolia task:update-pool
  */
-task("task:update-pool", "Updates the reward pool")
-  .addOptionalParam("address", "Optionally specify the SecretStakePlatform contract address")
-  .setAction(async function (taskArguments: TaskArguments, hre) {
-    const { ethers, deployments } = hre;
+// task("task:update-pool", "Updates the reward pool")
+//   .addOptionalParam("address", "Optionally specify the SecretStakePlatform contract address")
+//   .setAction(async function (taskArguments: TaskArguments, hre) {
+//     const { ethers, deployments } = hre;
 
-    const SecretStakePlatformDeployment = taskArguments.address
-      ? { address: taskArguments.address }
-      : await deployments.get("SecretStakePlatform");
-    console.log(`SecretStakePlatform: ${SecretStakePlatformDeployment.address} `);
+//     const SecretStakePlatformDeployment = taskArguments.address
+//       ? { address: taskArguments.address }
+//       : await deployments.get("SecretStakePlatform");
+//     console.log(`SecretStakePlatform: ${SecretStakePlatformDeployment.address} `);
 
-    const signers = await ethers.getSigners();
+//     const signers = await ethers.getSigners();
 
-    const platformContract = await ethers.getContractAt("SecretStakePlatform", SecretStakePlatformDeployment.address);
+//     const platformContract = await ethers.getContractAt("SecretStakePlatform", SecretStakePlatformDeployment.address);
 
-    const tx = await platformContract.connect(signers[0]).updatePool();
-    console.log(`Wait for tx:${tx.hash}...`);
+//     const tx = await platformContract.connect(signers[0]).updatePool();
+//     console.log(`Wait for tx:${tx.hash}...`);
 
-    const receipt = await tx.wait();
-    console.log(`tx:${tx.hash} status = ${receipt?.status} `);
+//     const receipt = await tx.wait();
+//     console.log(`tx:${tx.hash} status = ${receipt?.status} `);
 
-    console.log(`Update pool succeeded!`);
-  });
+//     console.log(`Update pool succeeded!`);
+//   });
 
 /**
  * Example:
@@ -520,14 +520,14 @@ task("task:get-user-info", "Gets comprehensive user information")
     console.log(`Reward Debt: ${clearRewardDebt.toString()} `);
 
     // Get pending rewards
-    const encryptedPendingRewards = await platformContract.pendingRewards(userAddress);
-    const clearPendingRewards = encryptedPendingRewards === ethers.ZeroHash ? 0n :
-      await fhevm.userDecryptEuint(FhevmType.euint64, encryptedPendingRewards, SecretStakePlatformDeployment.address, signers[0]);
-    console.log(`Pending Rewards: ${clearPendingRewards.toString()} `);
+    // const encryptedPendingRewards = await platformContract.pendingRewards(userAddress);
+    // const clearPendingRewards = encryptedPendingRewards === ethers.ZeroHash ? 0n :
+    // await fhevm.userDecryptEuint(FhevmType.euint64, encryptedPendingRewards, SecretStakePlatformDeployment.address, signers[0]);
+    // console.log(`Pending Rewards: ${clearPendingRewards.toString()} `);
 
     // Get user info struct
     const userInfo = await platformContract.userInfo(userAddress);
-    console.log(`Last Stake Block: ${userInfo.lastStakeBlock} `);
+    // console.log(`Last Stake Block: ${userInfo.lastStakeBlock} `);
 
     // Get stake count
     const stakeCount = await platformContract.userStakeCount(userAddress);
@@ -550,55 +550,55 @@ task("task:get-user-info", "Gets comprehensive user information")
  *   - npx hardhat --network localhost task:platform-info
  *   - npx hardhat --network sepolia task:platform-info
  */
-task("task:platform-info", "Gets comprehensive platform information")
-  .addOptionalParam("address", "Optionally specify the SecretStakePlatform contract address")
-  .setAction(async function (taskArguments: TaskArguments, hre) {
-    const { ethers, deployments, fhevm } = hre;
+// task("task:platform-info", "Gets comprehensive platform information")
+//   .addOptionalParam("address", "Optionally specify the SecretStakePlatform contract address")
+//   .setAction(async function (taskArguments: TaskArguments, hre) {
+//     const { ethers, deployments, fhevm } = hre;
 
-    await fhevm.initializeCLIApi();
+//     await fhevm.initializeCLIApi();
 
-    const SecretStakePlatformDeployment = taskArguments.address
-      ? { address: taskArguments.address }
-      : await deployments.get("SecretStakePlatform");
-    console.log(`SecretStakePlatform: ${SecretStakePlatformDeployment.address} `);
+//     const SecretStakePlatformDeployment = taskArguments.address
+//       ? { address: taskArguments.address }
+//       : await deployments.get("SecretStakePlatform");
+//     console.log(`SecretStakePlatform: ${SecretStakePlatformDeployment.address} `);
 
-    const signers = await ethers.getSigners();
+//     const signers = await ethers.getSigners();
 
-    const platformContract = await ethers.getContractAt("SecretStakePlatform", SecretStakePlatformDeployment.address);
+//     const platformContract = await ethers.getContractAt("SecretStakePlatform", SecretStakePlatformDeployment.address);
 
-    console.log(`\n === Platform Information === `);
+//     console.log(`\n === Platform Information === `);
 
-    // 平台级字段为机密数据：仅打印密文句柄，不尝试解密
-    const encryptedTotalStaked = await platformContract.getTotalStaked();
-    console.log(`Encrypted Total Staked: ${encryptedTotalStaked} `);
+//     // 平台级字段为机密数据：仅打印密文句柄，不尝试解密
+//     const encryptedTotalStaked = await platformContract.getTotalStaked();
+//     console.log(`Encrypted Total Staked: ${encryptedTotalStaked} `);
 
-    // 累计奖励指标接口已移除（固定利息模型），不再输出
+//     // 累计奖励指标接口已移除（固定利息模型），不再输出
 
-    // Fixed daily reward model
-    const UNIT = await platformContract.UNIT();
-    const REWARD_PER_UNIT_PER_DAY = await platformContract.REWARD_PER_UNIT_PER_DAY();
-    console.log(`Unit(10k USDT in base units): ${UNIT.toString()} `);
-    console.log(`Reward Per Unit Per Day: ${REWARD_PER_UNIT_PER_DAY.toString()} `);
+//     // Fixed daily reward model
+//     const UNIT = await platformContract.UNIT();
+//     const REWARD_PER_UNIT_PER_DAY = await platformContract.REWARD_PER_UNIT_PER_DAY();
+//     console.log(`Unit(10k USDT in base units): ${UNIT.toString()} `);
+//     console.log(`Reward Per Unit Per Day: ${REWARD_PER_UNIT_PER_DAY.toString()} `);
 
-    // Get last reward block
-    const lastRewardBlock = await platformContract.lastRewardBlock();
-    console.log(`Last Reward Block: ${lastRewardBlock} `);
+//     // Get last reward block
+//     const lastRewardBlock = await platformContract.lastRewardBlock();
+//     console.log(`Last Reward Block: ${lastRewardBlock} `);
 
-    // Get current block
-    const currentBlock = await ethers.provider.getBlockNumber();
-    console.log(`Current Block: ${currentBlock} `);
+//     // Get current block
+//     const currentBlock = await ethers.provider.getBlockNumber();
+//     console.log(`Current Block: ${currentBlock} `);
 
-    // Last reward block retained for compatibility only
+//     // Last reward block retained for compatibility only
 
-    // Get token addresses
-    const stakingTokenAddress = await platformContract.stakingToken();
-    const rewardTokenAddress = await platformContract.rewardToken();
+//     // Get token addresses
+//     const stakingTokenAddress = await platformContract.stakingToken();
+//     const rewardTokenAddress = await platformContract.rewardToken();
 
-    console.log(`Staking Token(cUSDT): ${stakingTokenAddress} `);
-    console.log(`Reward Token(cSSC): ${rewardTokenAddress} `);
+//     console.log(`Staking Token(cUSDT): ${stakingTokenAddress} `);
+//     console.log(`Reward Token(cSSC): ${rewardTokenAddress} `);
 
-    console.log(`==========================\n`);
-  });
+//     console.log(`==========================\n`);
+//   });
 
 /**
  * Example:
