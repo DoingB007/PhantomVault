@@ -2,7 +2,7 @@ import { useAccount, useReadContract } from 'wagmi'
 import { ethers } from 'ethers'
 import { CONTRACT_ADDRESSES } from '../config/fhevm'
 import PLATFORM_ABI from '../abis/SecretStakePlatform.json'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useFHEVM } from '../hooks/useFHEVM'
 
 export function StakeInfo() {
@@ -10,8 +10,10 @@ export function StakeInfo() {
   const { decryptEuint64 } = useFHEVM()
   const [isDecStake, setIsDecStake] = useState(false)
   const [stakeVal, setStakeVal] = useState<bigint | null>(null)
+  const [isRefreshing, setIsRefreshing] = useState(false)
+  const [rewardTick, setRewardTick] = useState(0)
 
-  const { data: userInfo } = useReadContract({
+  const { data: userInfo, refetch: refetchUserInfo } = useReadContract({
     address: CONTRACT_ADDRESSES.SECRET_STAKE_PLATFORM as `0x${string}`,
     abi: PLATFORM_ABI as any,
     functionName: 'userInfo',
@@ -30,28 +32,58 @@ export function StakeInfo() {
     }
   }
 
+  const refreshStake = async () => {
+    setIsRefreshing(true)
+    try {
+      await refetchUserInfo()
+      // 清空已解密的值，需要重新解密
+      setStakeVal(null)
+    } finally {
+      setIsRefreshing(false)
+    }
+  }
+
+  // 每秒刷新一次奖励计算，让用户可以看到实时变化
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setRewardTick(prev => prev + 1)
+    }, 1000)
+
+    return () => clearInterval(interval)
+  }, [])
+
   // Calculate pending rewards based on staked amount and time
   const calculatePendingRewards = () => {
-    if (!userInfo || stakeVal == null) return 0
+    if (!userInfo || stakeVal == null) {
+      return 0
+    }
 
-    const lastClaimTime = userInfo[2] as number // lastClaimTime from userInfo
-    if (lastClaimTime === 0) return 0
+    const lastClaimTime = Number(userInfo[2]) // lastClaimTime from userInfo
+    if (lastClaimTime === 0) {
+      return 0
+    }
 
     const now = Math.floor(Date.now() / 1000)
     const elapsed = now - lastClaimTime
-    const daysElapsed = Math.floor(elapsed / (24 * 60 * 60))
 
-    if (daysElapsed === 0) return 0
+    // 如果刚刚操作过，没有时间间隔
+    if (elapsed === 0) {
+      return 0
+    }
 
-    // Constants from contract
-    const UNIT = 10_000 * 1e6 // 10,000 USDT in wei
-    const REWARD_PER_UNIT_PER_DAY = 1e6 // 1 cSSC in wei
+    // Constants from contract (using BigInt for precision)
+    const UNIT = BigInt(10_000 * 1000000) // 10,000 USDT in wei
+    const REWARD_PER_UNIT_PER_DAY = BigInt(1000000) // 1 cSSC in wei
+    const SECONDS_PER_DAY = 24 * 60 * 60
 
-    // Calculate: stakeUnits = floor(stakedAmount / UNIT)
-    const stakeUnits = Math.floor(Number(stakeVal) / UNIT)
+    // 修改计算逻辑：不使用整数单位，而是按比例计算
+    // pending = (stakedAmount / UNIT) * elapsed * REWARD_PER_UNIT_PER_DAY / DAY_SECS
+    const stakedAmountNum = Number(stakeVal)
+    const unitNum = Number(UNIT)
+    const rewardPerUnitPerDayNum = Number(REWARD_PER_UNIT_PER_DAY)
 
-    // Calculate: pending = stakeUnits * daysElapsed * REWARD_PER_UNIT_PER_DAY
-    const pending = stakeUnits * daysElapsed * REWARD_PER_UNIT_PER_DAY
+    // 按比例计算：(质押金额 / 基准单位) * 经过秒数 * 每单位每天奖励 / 每天秒数
+    const pending = (stakedAmountNum / unitNum) * elapsed * rewardPerUnitPerDayNum / SECONDS_PER_DAY
 
     return pending
   }
@@ -100,14 +132,18 @@ export function StakeInfo() {
               }
 
               // Show decrypted value
-              return (Number(stakeVal) / 1e6).toLocaleString(undefined, { maximumFractionDigits: 6 })
+              return (Number(stakeVal) / 1e6).toLocaleString(undefined, { maximumFractionDigits: 6 }) + ' cUSDT'
             })()
           }</p>
           <div className="flex items-center justify-between">
-            <p className="text-sm text-gray-600">cUSDT (Encrypted)</p>
-            <button className="text-xs text-blue-600 hover:text-blue-800" onClick={decryptStake} disabled={isDecStake}>
-              解密
-            </button>
+            <div className="flex gap-2">
+              <button className="text-xs text-blue-600 hover:text-blue-800" onClick={decryptStake} disabled={isDecStake}>
+                解密
+              </button>
+              <button className="text-xs text-gray-600 hover:text-gray-800" onClick={refreshStake} disabled={isRefreshing}>
+                刷新
+              </button>
+            </div>
           </div>
         </div>
         
@@ -120,13 +156,12 @@ export function StakeInfo() {
                 return '***'
               }
 
-              // Calculate and show pending rewards
-              const pending = calculatePendingRewards()
-              return (pending / 1e6).toLocaleString(undefined, { maximumFractionDigits: 6 })
+              // Calculate and show pending rewards (rewardTick forces recalculation every second)
+              const pending = calculatePendingRewards() + rewardTick * 0 // 添加rewardTick依赖但不影响计算
+              return (pending / 1e6).toLocaleString(undefined, { maximumFractionDigits: 6 }) + ' cSSC'
             })()
           }</p>
           <div className="flex items-center justify-between">
-            <p className="text-sm text-gray-600">cSSC (Calculated)</p>
             {stakeVal !== null && (
               <span className="text-xs text-gray-500">
                 Auto-calculated
