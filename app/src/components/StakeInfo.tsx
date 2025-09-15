@@ -9,9 +9,7 @@ export function StakeInfo() {
   const { address, isConnected } = useAccount()
   const { decryptEuint64 } = useFHEVM()
   const [isDecStake, setIsDecStake] = useState(false)
-  const [isDecRewards, setIsDecRewards] = useState(false)
   const [stakeVal, setStakeVal] = useState<bigint | null>(null)
-  const [rewardsVal, setRewardsVal] = useState<bigint | null>(null)
 
   const { data: userInfo } = useReadContract({
     address: CONTRACT_ADDRESSES.SECRET_STAKE_PLATFORM as `0x${string}`,
@@ -32,15 +30,30 @@ export function StakeInfo() {
     }
   }
 
-  const decryptRewards = async () => {
-    if (!userInfo) return
-    setIsDecRewards(true)
-    try {
-      const v = await decryptEuint64(CONTRACT_ADDRESSES.SECRET_STAKE_PLATFORM, userInfo[1] as string)
-      setRewardsVal(v)
-    } finally {
-      setIsDecRewards(false)
-    }
+  // Calculate pending rewards based on staked amount and time
+  const calculatePendingRewards = () => {
+    if (!userInfo || stakeVal == null) return 0
+
+    const lastClaimTime = userInfo[2] as number // lastClaimTime from userInfo
+    if (lastClaimTime === 0) return 0
+
+    const now = Math.floor(Date.now() / 1000)
+    const elapsed = now - lastClaimTime
+    const daysElapsed = Math.floor(elapsed / (24 * 60 * 60))
+
+    if (daysElapsed === 0) return 0
+
+    // Constants from contract
+    const UNIT = 10_000 * 1e6 // 10,000 USDT in wei
+    const REWARD_PER_UNIT_PER_DAY = 1e6 // 1 cSSC in wei
+
+    // Calculate: stakeUnits = floor(stakedAmount / UNIT)
+    const stakeUnits = Math.floor(Number(stakeVal) / UNIT)
+
+    // Calculate: pending = stakeUnits * daysElapsed * REWARD_PER_UNIT_PER_DAY
+    const pending = stakeUnits * daysElapsed * REWARD_PER_UNIT_PER_DAY
+
+    return pending
   }
   const handleClaim = async () => {
     try {
@@ -72,7 +85,23 @@ export function StakeInfo() {
         <div className="card-gray">
           <h3 className="text-sm font-medium text-gray-500">Staked Amount</h3>
           <p className="stat-value text-gray-900">{
-            stakeVal == null ? '***' : (Number(stakeVal) / 1e6).toLocaleString(undefined, { maximumFractionDigits: 6 })
+            (() => {
+              const zeroHash = '0x0000000000000000000000000000000000000000000000000000000000000000'
+              const encryptedStake = userInfo ? userInfo[0] as string : ''
+
+              // If it's a zero hash or empty, show 0
+              if (!encryptedStake || encryptedStake.toLowerCase() === zeroHash) {
+                return '0'
+              }
+
+              // If not decrypted yet, show ***
+              if (stakeVal == null) {
+                return '***'
+              }
+
+              // Show decrypted value
+              return (Number(stakeVal) / 1e6).toLocaleString(undefined, { maximumFractionDigits: 6 })
+            })()
           }</p>
           <div className="flex items-center justify-between">
             <p className="text-sm text-gray-600">cUSDT (Encrypted)</p>
@@ -85,13 +114,24 @@ export function StakeInfo() {
         <div className="card-gray">
           <h3 className="text-sm font-medium text-gray-500">Pending Rewards</h3>
           <p className="stat-value text-green-600">{
-            rewardsVal == null ? '***' : (Number(rewardsVal) / 1e6).toLocaleString(undefined, { maximumFractionDigits: 6 })
+            (() => {
+              // If staked amount is not decrypted yet, show ***
+              if (stakeVal == null) {
+                return '***'
+              }
+
+              // Calculate and show pending rewards
+              const pending = calculatePendingRewards()
+              return (pending / 1e6).toLocaleString(undefined, { maximumFractionDigits: 6 })
+            })()
           }</p>
           <div className="flex items-center justify-between">
-            <p className="text-sm text-gray-600">cSSC (Encrypted)</p>
-            <button className="text-xs text-blue-600 hover:text-blue-800" onClick={decryptRewards} disabled={isDecRewards}>
-              解密
-            </button>
+            <p className="text-sm text-gray-600">cSSC (Calculated)</p>
+            {stakeVal !== null && (
+              <span className="text-xs text-gray-500">
+                Auto-calculated
+              </span>
+            )}
           </div>
         </div>
       </div>
