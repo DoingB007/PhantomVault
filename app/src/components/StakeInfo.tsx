@@ -36,14 +36,14 @@ export function StakeInfo() {
     setIsRefreshing(true)
     try {
       await refetchUserInfo()
-      // 清空已解密的值，需要重新解密
+      // Clear decrypted value, need to re-decrypt
       setStakeVal(null)
     } finally {
       setIsRefreshing(false)
     }
   }
 
-  // 每秒刷新一次奖励计算，让用户可以看到实时变化
+  // Refresh reward calculations every second so users can see real-time changes
   useEffect(() => {
     const interval = setInterval(() => {
       setRewardTick(prev => prev + 1)
@@ -66,7 +66,7 @@ export function StakeInfo() {
     const now = Math.floor(Date.now() / 1000)
     const elapsed = now - lastClaimTime
 
-    // 如果刚刚操作过，没有时间间隔
+    // If just operated, no time interval
     if (elapsed === 0) {
       return 0
     }
@@ -76,13 +76,13 @@ export function StakeInfo() {
     const REWARD_PER_UNIT_PER_DAY = BigInt(1000000) // 1 cSSC in wei
     const SECONDS_PER_DAY = 24 * 60 * 60
 
-    // 修改计算逻辑：不使用整数单位，而是按比例计算
+    // Modified calculation logic: use proportional calculation instead of integer units
     // pending = (stakedAmount / UNIT) * elapsed * REWARD_PER_UNIT_PER_DAY / DAY_SECS
     const stakedAmountNum = Number(stakeVal)
     const unitNum = Number(UNIT)
     const rewardPerUnitPerDayNum = Number(REWARD_PER_UNIT_PER_DAY)
 
-    // 按比例计算：(质押金额 / 基准单位) * 经过秒数 * 每单位每天奖励 / 每天秒数
+    // Proportional calculation: (staked amount / base unit) * elapsed seconds * reward per unit per day / seconds per day
     const pending = (stakedAmountNum / unitNum) * elapsed * rewardPerUnitPerDayNum / SECONDS_PER_DAY
 
     return pending
@@ -138,10 +138,10 @@ export function StakeInfo() {
           <div className="flex items-center justify-between">
             <div className="flex gap-2">
               <button className="text-xs text-blue-600 hover:text-blue-800" onClick={decryptStake} disabled={isDecStake}>
-                解密
+                Decrypt
               </button>
               <button className="text-xs text-gray-600 hover:text-gray-800" onClick={refreshStake} disabled={isRefreshing}>
-                刷新
+                Refresh
               </button>
             </div>
           </div>
@@ -157,7 +157,7 @@ export function StakeInfo() {
               }
 
               // Calculate and show pending rewards (rewardTick forces recalculation every second)
-              const pending = calculatePendingRewards() + rewardTick * 0 // 添加rewardTick依赖但不影响计算
+              const pending = calculatePendingRewards() + rewardTick * 0 // Add rewardTick dependency without affecting calculation
               return (pending / 1e6).toLocaleString(undefined, { maximumFractionDigits: 6 }) + ' cSSC'
             })()
           }</p>

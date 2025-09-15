@@ -1,20 +1,20 @@
 [build]
-  # 构建命令
+  # Build command
   command = "npm run build"
-  # 构建输出目录
+  # Build output directory
   publish = "dist"
 
 [build.environment]
-  # 设置 Node.js 版本
+  # Set Node.js version
   NODE_VERSION = "21"
 
-# 重定向规则，用于 SPA 路由
+# Redirect rules for SPA routing
 [[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200
 
-# Headers 配置，解决 MIME 类型问题
+# Headers configuration to solve MIME type issues
 [[headers]]
   for = "*.js"
   [headers.values]
@@ -40,7 +40,7 @@
   [headers.values]
     Content-Type = "application/json; charset=utf-8"
 
-# 安全头部
+# Security headers
 [[headers]]
   for = "/*"
   [headers.values]

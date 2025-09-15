@@ -214,7 +214,7 @@ export function StakePanel() {
                 className="text-xs text-blue-600 hover:text-blue-800"
                 disabled={isDecrypting}
               >
-                解密
+                Decrypt
               </button>
               <button
                 onClick={() => refetchCUSDT()}
@@ -252,7 +252,7 @@ export function StakePanel() {
                 className="text-xs text-green-600 hover:text-green-800"
                 disabled={isDecrypting}
               >
-                解密
+                Decrypt
               </button>
               <button
                 onClick={() => refetchCSSC()}
