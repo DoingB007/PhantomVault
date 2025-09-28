@@ -1,4 +1,4 @@
-# Secret Stake Platform
+# PhantomVault
 
 A fully confidential staking platform built with Zama's Fully Homomorphic Encryption (FHE) technology. Stake encrypted USDT tokens and earn encrypted cSSC rewards while keeping all amounts completely private.
 
